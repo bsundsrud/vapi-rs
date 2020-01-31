@@ -1,0 +1,28 @@
+FROM ubuntu:18.04
+
+RUN apt-get update && apt-get upgrade -y && apt-get install -y curl gnupg apt-transport-https
+
+RUN curl -L https://packagecloud.io/varnishcache/varnish60lts/gpgkey | apt-key add -
+
+RUN echo "deb https://packagecloud.io/varnishcache/varnish60lts/ubuntu/ bionic main" >> /etc/apt/sources.list.d/varnish.list
+
+RUN apt-get update && apt-get install -y varnish-dev llvm-dev libclang-dev clang
+
+ARG UNAME=ubuntu
+ARG UID=1000
+ARG GID=1000
+RUN groupadd -g $GID -o $UNAME
+RUN useradd -m -u $UID -g $GID -o -s /bin/bash $UNAME
+USER $UNAME
+
+WORKDIR /home/$UNAME
+
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -o rustup-init.sh && sh rustup-init.sh -y --default-toolchain stable --profile minimal
+
+RUN echo 'export PATH=$HOME/.cargo/bin:$PATH' >> ~/.bashrc
+
+ENV PATH=/home/$UNAME/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+WORKDIR /home/$UNAME/code
+
+CMD [ "cargo", "build" ]
