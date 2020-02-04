@@ -1,4 +1,5 @@
 use crate::error::Result;
+use crate::vsl::{CursorOpts, LogCallback, LogGrouping, VarnishLogBuilder};
 use crate::vsm::{OpenVSM, VSMBuilder};
 use std::time::Duration;
 
@@ -43,4 +44,24 @@ impl Builder {
     }
 }
 
-impl Varnish {}
+impl Varnish {
+    pub fn new() -> Builder {
+        Builder::new()
+    }
+
+    pub fn log(
+        &self,
+        query: Option<String>,
+        cursor_opts: CursorOpts,
+        grouping: LogGrouping,
+        callback: LogCallback,
+    ) -> Result<()> {
+        let mut builder = VarnishLogBuilder::new();
+        builder.grouping(grouping);
+        builder.cursor_opts(cursor_opts);
+        if let Some(query) = query {
+            builder.query(query);
+        }
+        builder.execute(&self.shm, callback)
+    }
+}

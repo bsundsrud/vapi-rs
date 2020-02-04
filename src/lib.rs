@@ -1,13 +1,21 @@
 pub mod error;
-mod logs;
 pub mod vapi;
-pub mod vsl;
-pub mod vsm;
+mod vsl;
+mod vsm;
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
-    }
+pub use vapi::Varnish;
+pub use vsl::VslTag;
+pub use vsl::{
+    CallbackResult, CursorOpts, LogCallback, LogGrouping, LogLine, LogTransaction, Reason,
+    RecordType, TxType,
+};
+
+pub mod prelude {
+    pub use crate::error::VarnishError;
+    pub use crate::vapi::{Builder, Varnish};
+    pub use crate::vsl::{
+        CallbackResult, CursorOpts, LogCallback, LogGrouping, LogLine, LogTransaction, Reason,
+        RecordType, TxType,
+    };
+    pub use crate::VslTag;
 }

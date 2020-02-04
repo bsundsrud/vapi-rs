@@ -36,11 +36,15 @@ fn main() {
         .header("wrapper.h")
         .whitelist_type("VSC_.*")
         .whitelist_function("VSC_.*")
+        .whitelist_var("VSC_.*")
         .whitelist_type("vsm_.*")
         .whitelist_type("VSM_.*")
         .whitelist_function("VSM_.*")
+        .whitelist_var("VSM_.*")
         .whitelist_type("VSL.*")
         .whitelist_function("VSL.*")
+        .whitelist_var("VSL.*")
+        .rustified_enum("VSL_tag_e")
         .clang_args(clang_args)
         // Tell cargo to invalidate the built crate whenever any of the
         // included header files changed.

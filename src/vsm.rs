@@ -94,11 +94,8 @@ impl SharedMem {
 impl Drop for SharedMem {
     fn drop(&mut self) {
         unsafe {
-            println!("SharedMem::drop");
             if !self.vsm.is_null() {
-                println!("SharedMem::drop: not null");
                 vapi_sys::VSM_Destroy(&mut self.vsm);
-                println!("SharedMem::drop: dropped");
             }
         }
     }
@@ -106,6 +103,7 @@ impl Drop for SharedMem {
 
 pub struct OpenVSM(pub(crate) SharedMem);
 
+#[allow(dead_code)]
 pub mod vsm_status {
     pub const VSM_MGT_RUNNING: u32 = 1 << 1;
     pub const VSM_MGT_CHANGED: u32 = 1 << 2;

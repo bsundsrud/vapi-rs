@@ -6,6 +6,12 @@ pub enum VarnishError {
     VSMError(String),
     #[error("VSL Error: {0}")]
     VSLError(String),
+    #[error("Log overrun")]
+    LogOverrun,
+    #[error("I/O read error")]
+    IOError,
+    #[error("User Status code {0}")]
+    UserStatus(i32),
 }
 
 impl VarnishError {
