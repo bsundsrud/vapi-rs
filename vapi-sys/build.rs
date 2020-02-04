@@ -44,7 +44,6 @@ fn main() {
         .whitelist_type("VSL.*")
         .whitelist_function("VSL.*")
         .whitelist_var("VSL.*")
-        .rustified_enum("VSL_tag_e")
         .clang_args(clang_args)
         // Tell cargo to invalidate the built crate whenever any of the
         // included header files changed.

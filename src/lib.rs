@@ -4,7 +4,6 @@ mod vsl;
 mod vsm;
 
 pub use vapi::Varnish;
-pub use vsl::VslTag;
 pub use vsl::{
     CallbackResult, CursorOpts, LogCallback, LogGrouping, LogLine, LogTransaction, Reason,
     RecordType, TxType,
@@ -17,5 +16,4 @@ pub mod prelude {
         CallbackResult, CursorOpts, LogCallback, LogGrouping, LogLine, LogTransaction, Reason,
         RecordType, TxType,
     };
-    pub use crate::VslTag;
 }

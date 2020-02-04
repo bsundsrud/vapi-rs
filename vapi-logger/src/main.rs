@@ -6,9 +6,7 @@ fn callback(tx: LogTransaction) -> CallbackResult {
         "APP-- tx: {} {} {} {:?} {:?}",
         tx.level, tx.vxid, tx.parent_vxid, tx.ty, tx.reason
     );
-    for line in tx.data {
-        println!("APP-- {:?}", line);
-    }
+
     return CallbackResult::Continue;
 }
 

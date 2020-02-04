@@ -1,9 +1,7 @@
 mod internal;
-mod vsl_tags;
 
 use crate::error::Result;
 use crate::vsm::OpenVSM;
-pub use vsl_tags::VslTag;
 
 use internal::query_loop;
 
@@ -19,7 +17,7 @@ pub enum RecordType {
 #[derive(Debug)]
 pub struct LogLine {
     pub vxid: u32,
-    pub tag: VslTag,
+    pub tag: String,
     pub data: String,
     pub ty: RecordType,
 }

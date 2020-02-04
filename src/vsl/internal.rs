@@ -1,6 +1,5 @@
 use super::{
     CallbackResult, LogCallback, LogGrouping, LogLine, LogTransaction, Reason, RecordType, TxType,
-    VslTag,
 };
 use crate::error::{Result, VarnishError};
 use crate::vsm::{vsm_status, OpenVSM};
@@ -190,8 +189,11 @@ impl VslTransaction {
         let rec_ptr = (*(*self.tx).c).rec.ptr;
         let header: &[u32] = std::slice::from_raw_parts(rec_ptr, 2);
         let tag: u32 = header[0] >> 24;
-        let tag: vapi_sys::VSL_tag_e = std::mem::transmute(tag);
-        let tag: VslTag = tag.into();
+        let tag = CStr::from_ptr(vapi_sys::VSL_tags[tag as usize])
+            .to_string_lossy()
+            .to_string();
+        //let tag: vapi_sys::VSL_tag_e = std::mem::transmute(tag);
+        //let tag: VslTag = tag.into();
         let vxid = header[1] & VSL_IDENTMASK;
         let data_length: u32 = header[0] & VSL_LENMASK;
         let is_client: u32 = header[1] & VSL_CLIENTMARKER;
