@@ -8,3 +8,4 @@ edition = "2018"
 
 [dependencies]
 vapi = { path = "../vapi" }
+crossbeam = "0.7.3"

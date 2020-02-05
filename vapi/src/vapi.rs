@@ -87,7 +87,7 @@ impl<'vsm> LoggingBuilder<'vsm> {
         self
     }
 
-    pub fn build(self, callback: LogCallback, stop_channel: Option<Receiver<()>>) -> Result<()> {
+    pub fn start(self, callback: LogCallback, stop_channel: Option<Receiver<()>>) -> Result<()> {
         let mut builder = VarnishLogBuilder::new();
         builder.grouping(self.grouping);
         builder.cursor_opts(self.opts);
