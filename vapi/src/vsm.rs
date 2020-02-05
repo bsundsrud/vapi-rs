@@ -3,6 +3,7 @@ use std::ffi::CString;
 use std::time::Duration;
 use vapi_sys;
 
+#[derive(Debug)]
 pub(crate) struct SharedMem {
     pub(crate) vsm: *mut vapi_sys::vsm,
 }
@@ -46,7 +47,7 @@ impl SharedMem {
         let vsm = unsafe {
             let vsm = vapi_sys::VSM_New();
             if vsm.is_null() {
-                return Err(VarnishError::from_vsm_error(vsm));
+                return Err(VarnishError::from_raw_vsm_error(vsm));
             }
             vsm
         };
@@ -59,7 +60,7 @@ impl SharedMem {
         let arg = CString::new(String::from("n")).unwrap();
         unsafe {
             if vapi_sys::VSM_Arg(self.vsm, *arg.as_ptr(), val.as_ptr()) != 1 {
-                return Err(VarnishError::from_vsm_error(self.vsm));
+                return Err(VarnishError::from_vsm_error(&self));
             }
         }
         Ok(())
@@ -74,7 +75,7 @@ impl SharedMem {
         let arg = CString::new(String::from("t")).unwrap();
         unsafe {
             if vapi_sys::VSM_Arg(self.vsm, *arg.as_ptr(), val.as_ptr()) != 1 {
-                return Err(VarnishError::from_vsm_error(self.vsm));
+                return Err(VarnishError::from_vsm_error(&self));
             }
         }
 
@@ -84,7 +85,7 @@ impl SharedMem {
     fn attach(self) -> Result<OpenVSM> {
         unsafe {
             if vapi_sys::VSM_Attach(self.vsm, -1) != 0 {
-                return Err(VarnishError::from_vsm_error(self.vsm));
+                return Err(VarnishError::from_vsm_error(&self));
             }
         }
         Ok(OpenVSM(self))
@@ -101,6 +102,7 @@ impl Drop for SharedMem {
     }
 }
 
+#[derive(Debug)]
 pub struct OpenVSM(pub(crate) SharedMem);
 
 #[allow(dead_code)]

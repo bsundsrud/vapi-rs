@@ -1,11 +1,13 @@
-mod internal;
+pub(crate) mod internal;
 
 use crate::error::Result;
 use crate::vsm::OpenVSM;
-
 use internal::query_loop;
+use std::sync::mpsc::Receiver;
 
 use vapi_sys;
+
+pub type LogCallback = Box<dyn Fn(LogTransaction) -> CallbackResult>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RecordType {
@@ -22,6 +24,7 @@ pub struct LogLine {
     pub ty: RecordType,
 }
 
+#[derive(Debug)]
 pub enum LogGrouping {
     Raw,
     Vxid,
@@ -41,11 +44,11 @@ impl LogGrouping {
     }
 }
 
-const TAIL: u32 = 1 << 0;
+const TAIL: u32 = 1;
 const BATCH: u32 = 1 << 1;
 const TAILSTOP: u32 = 1 << 2;
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct CursorOpts(u32);
 
 impl CursorOpts {
@@ -57,6 +60,7 @@ impl CursorOpts {
         self.0 |= TAIL;
         self
     }
+
     pub fn batch(mut self) -> Self {
         self.0 |= BATCH;
         self
@@ -118,18 +122,22 @@ impl VarnishLogBuilder {
         self
     }
 
-    pub fn execute<'vsm>(self, vsm: &'vsm OpenVSM, callback: LogCallback) -> Result<()> {
+    pub fn execute(
+        self,
+        vsm: &OpenVSM,
+        callback: LogCallback,
+        stop_channel: Option<Receiver<()>>,
+    ) -> Result<()> {
         query_loop(
             vsm,
             self.grouping,
             self.query,
             self.cursor_opts.into(),
             callback,
+            stop_channel,
         )
     }
 }
-
-pub type LogCallback = Box<dyn Fn(LogTransaction) -> CallbackResult>;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum CallbackResult {

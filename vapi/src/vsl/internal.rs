@@ -5,6 +5,7 @@ use crate::error::{Result, VarnishError};
 use crate::vsm::{vsm_status, OpenVSM};
 use std::ffi::{CStr, CString};
 use std::ptr;
+use std::sync::mpsc::{Receiver, TryRecvError};
 use std::time::Duration;
 use vapi_sys;
 
@@ -15,8 +16,8 @@ const VSL_CLIENTMARKER: u32 = 1u32 << 30;
 const VSL_BACKENDMARKER: u32 = 1u32 << 31;
 
 #[derive(Debug)]
-struct Vsl {
-    vsl: *mut vapi_sys::VSL_data,
+pub(crate) struct Vsl {
+    pub(crate) vsl: *mut vapi_sys::VSL_data,
 }
 
 impl Drop for Vsl {
@@ -58,7 +59,7 @@ impl VslQ {
         let vslq =
             unsafe { vapi_sys::VSLQ_New(vsl.vsl, ptr::null_mut(), grouping.as_raw(), ptr::null()) };
         if vslq.is_null() {
-            return Err(VarnishError::from_vsl_error(vsl.vsl));
+            return Err(VarnishError::from_vsl_error(&vsl));
         }
 
         Ok(VslQ { vslq })
@@ -70,7 +71,7 @@ impl VslQ {
             vapi_sys::VSLQ_New(vsl.vsl, ptr::null_mut(), grouping.as_raw(), query.as_ptr())
         };
         if vslq.is_null() {
-            return Err(VarnishError::from_vsl_error(vsl.vsl));
+            return Err(VarnishError::from_vsl_error(&vsl));
         }
 
         Ok(VslQ { vslq })
@@ -229,6 +230,7 @@ pub(crate) fn query_loop(
     query: Option<String>,
     cursor_opts: u32,
     callback: LogCallback,
+    stop: Option<Receiver<()>>,
 ) -> Result<()> {
     let mut vsl = Vsl::new()?;
     let mut vslq = if let Some(q) = query {
@@ -238,11 +240,9 @@ pub(crate) fn query_loop(
     };
     let mut cursor = None;
     loop {
-        if vsm.status() & vsm_status::VSM_WRK_RESTARTED != 0 {
-            if cursor.is_some() {
-                vslq.clear_cursor();
-                cursor = None;
-            }
+        if vsm.status() & vsm_status::VSM_WRK_RESTARTED != 0 && cursor.is_some() {
+            vslq.clear_cursor();
+            cursor = None;
         }
         if cursor.is_none() {
             if let Some(mut c) = VslCursor::new(&mut vsl, vsm, cursor_opts) {
@@ -253,9 +253,25 @@ pub(crate) fn query_loop(
             }
         }
         let res = unsafe {
-            let callback: *mut std::os::raw::c_void = std::mem::transmute(&callback);
+            let callback = &callback as *const LogCallback as *mut std::ffi::c_void;
             vapi_sys::VSLQ_Dispatch(vslq.vslq, Some(rust_callback), callback)
         };
+        let should_stop = stop
+            .as_ref()
+            .map(|r| match r.try_recv() {
+                // received signal, stop
+                Ok(_) => true,
+                // didn't receive anything, keep going
+                Err(TryRecvError::Empty) => false,
+                // channel is closed or errored, stop
+                _ => true,
+            })
+            // if there's no channel, don't stop ever
+            .unwrap_or(false);
+
+        if should_stop {
+            return Ok(());
+        }
         match res {
             0 => {
                 std::thread::sleep(Duration::from_millis(10));
@@ -269,7 +285,7 @@ pub(crate) fn query_loop(
             }
             -3 => return Err(VarnishError::LogOverrun),
             -4 => return Err(VarnishError::IOError),
-            e @ _ => return Err(VarnishError::UserStatus(e)),
+            e => return Err(VarnishError::UserStatus(e)),
         }
     }
 
@@ -282,7 +298,7 @@ unsafe extern "C" fn rust_callback(
     mut tx: *const *mut vapi_sys::VSL_transaction,
     priv_: *mut std::os::raw::c_void,
 ) -> std::os::raw::c_int {
-    let callback: &LogCallback = std::mem::transmute(priv_);
+    let callback: &LogCallback = &*(priv_ as *const LogCallback);
     loop {
         if tx.is_null() {
             break;

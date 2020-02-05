@@ -55,7 +55,11 @@ fn main() {
 
     // Write the bindings to the $OUT_DIR/bindings.rs file.
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
+    let gen_path = PathBuf::new().join("generated");
     bindings
         .write_to_file(out_path.join("bindings.rs"))
+        .expect("Couldn't write bindings!");
+    bindings
+        .write_to_file(gen_path.join("bindings.rs"))
         .expect("Couldn't write bindings!");
 }
