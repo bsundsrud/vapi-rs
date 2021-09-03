@@ -3,8 +3,8 @@ pub mod vapi;
 mod vsl;
 mod vsm;
 
-pub use vapi::Varnish;
-pub use vsl::{
+pub use crate::vapi::Varnish;
+pub use crate::vsl::{
     CallbackResult, CursorOpts, LogCallback, LogGrouping, LogLine, LogTransaction, Reason,
     RecordType, TxType,
 };
