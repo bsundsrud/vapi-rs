@@ -15,13 +15,13 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: Package pre-reqs
-      run: apt-get update && apt-get upgrade -y && apt-get install -y curl gnupg apt-transport-https
+      run: sudo apt-get update && sudo apt-get install -y curl gnupg apt-transport-https
     - name: Repo GPG Key
-      run: curl -L https:/curl -L https://packagecloud.io/varnishcache/varnish60lts/gpgkey | apt-key add -/packagecloud.io/varnishcache/varnish60lts/gpgkey | apt-key add -
+      run: curl -L https://packagecloud.io/varnishcache/varnish60lts/gpgkey | sudo apt-key add -
     - name: Repo install
-      run: echo "deb https://packagecloud.io/varnishcache/varnish60lts/ubuntu/ focal main" >> /etc/apt/sources.list.d/varnish.list
+      run: echo "deb https://packagecloud.io/varnishcache/varnish60lts/ubuntu/ focal main" | sudo tee -a /etc/apt/sources.list.d/varnish.list
     - name: Varnish Install
-      run: apt-get update && apt-get install varnish=6.0.8-1~focal varnish-dev=6.0.8-1~focal
+      run: sudo apt-get update && sudo apt-get install varnish=6.0.8-1~focal varnish-dev=6.0.8-1~focal
     - name: Build
       run: cargo build --verbose
     - name: Run Tests
