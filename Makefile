@@ -11,3 +11,6 @@ run: build-docker
 
 release-build: build-docker
 	docker run $(DOCKER_RUN_ARGS) $(DOCKER_TAG) build --release
+
+get-version:
+	@cat vapi-logger/Cargo.toml | grep '^version' | sed 's/^version\s*=\s*"\(.\+\)"/\1/'
