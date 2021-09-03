@@ -34,16 +34,16 @@ fn main() {
         // The input header we would like to generate
         // bindings for.
         .header("wrapper.h")
-        .whitelist_type("VSC_.*")
-        .whitelist_function("VSC_.*")
-        .whitelist_var("VSC_.*")
-        .whitelist_type("vsm_.*")
-        .whitelist_type("VSM_.*")
-        .whitelist_function("VSM_.*")
-        .whitelist_var("VSM_.*")
-        .whitelist_type("VSL.*")
-        .whitelist_function("VSL.*")
-        .whitelist_var("VSL.*")
+        .allowlist_type("VSC_.*")
+        .allowlist_function("VSC_.*")
+        .allowlist_var("VSC_.*")
+        .allowlist_type("vsm_.*")
+        .allowlist_type("VSM_.*")
+        .allowlist_function("VSM_.*")
+        .allowlist_var("VSM_.*")
+        .allowlist_type("VSL.*")
+        .allowlist_function("VSL.*")
+        .allowlist_var("VSL.*")
         .clang_args(clang_args)
         // Tell cargo to invalidate the built crate whenever any of the
         // included header files changed.

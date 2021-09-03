@@ -2,8 +2,8 @@ pub(crate) mod internal;
 
 use crate::error::Result;
 use crate::vsm::OpenVSM;
+use crossbeam_channel::{Receiver, Sender};
 use internal::query_loop;
-use std::sync::mpsc::Receiver;
 
 use vapi_sys;
 
@@ -97,6 +97,8 @@ pub(crate) struct VarnishLogBuilder {
     grouping: LogGrouping,
     query: Option<String>,
     cursor_opts: CursorOpts,
+    reacquire: bool,
+    reacquire_signal: Option<Sender<()>>,
 }
 
 impl VarnishLogBuilder {
@@ -105,6 +107,8 @@ impl VarnishLogBuilder {
             grouping: LogGrouping::Vxid,
             query: None,
             cursor_opts: CursorOpts::new(),
+            reacquire: false,
+            reacquire_signal: None,
         }
     }
     pub fn grouping(&mut self, grouping: LogGrouping) -> &mut Self {
@@ -122,6 +126,16 @@ impl VarnishLogBuilder {
         self
     }
 
+    pub fn reacquire_if_overrun(&mut self) -> &mut Self {
+        self.reacquire = true;
+        self
+    }
+
+    pub fn reacquire_and_notify_if_overrun(&mut self, tx: Sender<()>) -> &mut Self {
+        self.reacquire_signal = Some(tx);
+        self
+    }
+
     pub fn execute(
         self,
         vsm: &OpenVSM,
@@ -133,6 +147,8 @@ impl VarnishLogBuilder {
             self.grouping,
             self.query,
             self.cursor_opts.into(),
+            self.reacquire,
+            self.reacquire_signal,
             callback,
             stop_channel,
         )

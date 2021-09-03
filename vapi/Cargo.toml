@@ -8,4 +8,5 @@ edition = "2018"
 
 [dependencies]
 vapi-sys = { path = "../vapi-sys" }
-thiserror = "1.0.10"
+thiserror = "1.0.26"
+crossbeam-channel = "0.5.1"

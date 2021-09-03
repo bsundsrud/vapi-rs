@@ -3,9 +3,9 @@ use super::{
 };
 use crate::error::{Result, VarnishError};
 use crate::vsm::{vsm_status, OpenVSM};
+use crossbeam_channel::{Receiver, Sender, TryRecvError};
 use std::ffi::{CStr, CString};
 use std::ptr;
-use std::sync::mpsc::{Receiver, TryRecvError};
 use std::time::Duration;
 use vapi_sys;
 
@@ -229,6 +229,8 @@ pub(crate) fn query_loop(
     grouping: LogGrouping,
     query: Option<String>,
     cursor_opts: u32,
+    reacquire_on_overrun: bool,
+    reacquire_signal: Option<Sender<()>>,
     callback: LogCallback,
     stop: Option<Receiver<()>>,
 ) -> Result<()> {
@@ -283,7 +285,17 @@ pub(crate) fn query_loop(
                 vslq.clear_cursor();
                 cursor = None
             }
-            -3 => return Err(VarnishError::LogOverrun),
+            -3 => {
+                if reacquire_on_overrun {
+                    vslq.clear_cursor();
+                    cursor = None;
+                    if let Some(ref tx) = reacquire_signal {
+                        tx.send(()).map_err(|_| VarnishError::LogOverrun)?;
+                    }
+                } else {
+                    return Err(VarnishError::LogOverrun);
+                }
+            }
             -4 => return Err(VarnishError::IOError),
             e => return Err(VarnishError::UserStatus(e)),
         }

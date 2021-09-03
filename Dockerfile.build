@@ -25,4 +25,6 @@ ENV PATH=/home/$UNAME/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/b
 
 WORKDIR /home/$UNAME/code
 
-CMD [ "cargo", "build" ]
+ENTRYPOINT [ "cargo" ]
+
+CMD [ "build" ]

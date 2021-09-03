@@ -1,7 +1,7 @@
 use crate::error::Result;
 use crate::vsl::{CursorOpts, LogCallback, LogGrouping, VarnishLogBuilder};
 use crate::vsm::{OpenVSM, VSMBuilder};
-use std::sync::mpsc::Receiver;
+use crossbeam_channel::{Receiver, Sender};
 use std::time::Duration;
 
 pub struct Varnish {
@@ -60,6 +60,8 @@ pub struct LoggingBuilder<'vsm> {
     query: Option<String>,
     opts: CursorOpts,
     grouping: LogGrouping,
+    reacquire: bool,
+    reacquire_signal: Option<Sender<()>>,
 }
 
 impl<'vsm> LoggingBuilder<'vsm> {
@@ -69,11 +71,16 @@ impl<'vsm> LoggingBuilder<'vsm> {
             query: None,
             opts: CursorOpts::new(),
             grouping: LogGrouping::Vxid,
+            reacquire: false,
+            reacquire_signal: None,
         }
     }
 
     pub fn query<S: Into<String>>(mut self, query: S) -> Self {
-        self.query = Some(query.into());
+        let q = query.into();
+        if q != "" {
+            self.query = Some(q);
+        }
         self
     }
 
@@ -87,10 +94,26 @@ impl<'vsm> LoggingBuilder<'vsm> {
         self
     }
 
+    pub fn reacquire_after_overrun(mut self) -> Self {
+        self.reacquire = true;
+        self
+    }
+
+    pub fn reacquire_and_signal_after_overrun(mut self, tx: Sender<()>) -> Self {
+        self.reacquire = true;
+        self.reacquire_signal = Some(tx);
+        self
+    }
+
     pub fn start(self, callback: LogCallback, stop_channel: Option<Receiver<()>>) -> Result<()> {
         let mut builder = VarnishLogBuilder::new();
         builder.grouping(self.grouping);
         builder.cursor_opts(self.opts);
+        if let Some(tx) = self.reacquire_signal {
+            builder.reacquire_and_notify_if_overrun(tx);
+        } else if self.reacquire {
+            builder.reacquire_if_overrun();
+        }
         if let Some(query) = self.query {
             builder.query(query);
         }

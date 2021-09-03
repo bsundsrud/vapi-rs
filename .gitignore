@@ -2,3 +2,4 @@
 /vapi-sys/target
 /vapi-logger/target
 Cargo.lock
+config.toml
