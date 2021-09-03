@@ -18,3 +18,7 @@ Line-oriented logger for Varnish, intended to be used for ingestion into
 a system like Elasticsearch via Logstash or similar.
 
 See its [README](vapi-logger/README.md) for details.
+
+## License
+
+Dual Licensed under Apache-2.0 and MIT.
