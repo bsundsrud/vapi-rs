@@ -27,6 +27,7 @@ pub enum ReasonDef {
     Fetch,
     BgFetch,
     Pipe,
+    NotHandled(u32),
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize)]

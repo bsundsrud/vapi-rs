@@ -86,7 +86,7 @@ impl LogTransform {
             .ip_source(&config.ip_source)
     }
 
-    pub fn transform(&self, log: LogTransaction) -> Result<LogRecord> {
+    pub fn transform(&self, log: LogTransaction) -> Result<Option<LogRecord>> {
         let level = log.level;
         let vxid = log.vxid;
         let mut parent_vxid = 0;
@@ -116,6 +116,9 @@ impl LogTransform {
             let data = line.data;
 
             match tag.as_str() {
+                "HttpGarbage" => {
+                    return Ok(None);
+                }
                 "Begin" => {
                     parent_vxid = try_parse_parent_vxid(&data)?;
                 }
@@ -134,6 +137,9 @@ impl LogTransform {
                 "VCL_return" => {
                     if data.to_lowercase() == "pipe" {
                         handling = Some(CacheHandling::Pipe);
+                    }
+                    if data.to_lowercase() == "restart" {
+                        return Ok(None);
                     }
                     call_chain.push(format!("Return {}", &data));
                 }
@@ -271,22 +277,23 @@ impl LogTransform {
             ttfb_msec,
             meta: self.meta.clone(),
         };
-        Ok(rec)
+        Ok(Some(rec))
     }
 }
 
-fn send_to_stdout(t: LogTransform, rx: Receiver<LogTransaction>) -> ! {
+fn send_to_stdout(t: LogTransform, rx: Receiver<LogTransaction>) -> Result<()> {
     loop {
         select! {
-            recv(rx) -> res => match res {
-                Ok(log) => match t.transform(log) {
-                    Ok(out) => {
+            recv(rx) -> res => {
+                let log = res?;
+                match t.transform(log) {
+                    Ok(Some(out)) => {
                         println!("-----------------------------------------");
                         println!("{}", serde_json::to_string_pretty(&out).unwrap());
-                    },
-                    Err(e) => { error!("Error in transform: {}", e)},
-                },
-                Err(e) => error!("Error receiving log data: {}", e)
+                    }
+                    Ok(None) => {}
+                    Err(e) => { error!("Error in transform: {}", e)}
+                }
             }
         }
     }
@@ -329,9 +336,10 @@ fn send_to_tcp(
 
     loop {
         select! {
-            recv(rx) -> res => match res {
-                Ok(log) => match t.transform(log) {
-                    Ok(out) => {
+            recv(rx) -> res => {
+                let log = res?;
+                 match t.transform(log) {
+                    Ok(Some(out)) => {
                         let mut json: String = serde_json::to_string(&out)?;
                         json.push('\n');
                         if let Err(e) = stream.write(json.as_bytes()) {
@@ -339,9 +347,9 @@ fn send_to_tcp(
                             stream = loop_until_connected(&addr, timeout, retry_interval);
                         }
                     },
+                    Ok(None) => {},
                     Err(e) => { error!("Error in transform: {}", e)},
-                },
-                Err(e) => error!("Error receiving log data: {}", e)
+                }
             }
         }
     }

@@ -7,6 +7,7 @@ use crossbeam_channel::{Receiver, Sender, TryRecvError};
 use std::ffi::{CStr, CString};
 use std::ptr;
 use std::time::Duration;
+use tracing::warn;
 use vapi_sys;
 
 // from vapi/vsl_int.h
@@ -107,16 +108,18 @@ impl Drop for VslCursor {
 }
 
 impl VslCursor {
-    fn new(vsl: &mut Vsl, vsm: &OpenVSM, opts: u32) -> Option<VslCursor> {
+    fn new(vsl: &mut Vsl, vsm: &OpenVSM, opts: u32) -> Result<VslCursor> {
         let cursor = unsafe {
             let c = vapi_sys::VSL_CursorVSM(vsl.vsl, vsm.0.vsm, opts);
             if c.is_null() {
+                let e = vapi_sys::VSL_Error(vsl.vsl);
+                let error_msg = CStr::from_ptr(e).to_string_lossy().to_string();
                 vapi_sys::VSL_ResetError(vsl.vsl);
-                return None;
+                return Err(VarnishError::VSLError(error_msg));
             }
             c
         };
-        Some(VslCursor { cursor })
+        Ok(VslCursor { cursor })
     }
 }
 
@@ -247,11 +250,15 @@ pub(crate) fn query_loop(
             cursor = None;
         }
         if cursor.is_none() {
-            if let Some(mut c) = VslCursor::new(&mut vsl, vsm, cursor_opts) {
-                vslq.set_cursor(&mut c);
-                cursor = Some(c);
-            } else {
-                continue;
+            match VslCursor::new(&mut vsl, vsm, cursor_opts) {
+                Ok(mut c) => {
+                    vslq.set_cursor(&mut c);
+                    cursor = Some(c);
+                }
+                Err(e) => {
+                    warn!("Error creating cursor: {}", e);
+                    continue;
+                }
             }
         }
         let res = unsafe {

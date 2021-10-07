@@ -10,6 +10,17 @@ fn default_retry_interval() -> u64 {
     5
 }
 
+fn default_shm_connect_timeout() -> u64 {
+    5
+}
+
+#[derive(Debug, Deserialize, Default)]
+pub struct InputConfig {
+    #[serde(default = "default_shm_connect_timeout")]
+    pub connect_timeout_secs: u64,
+    pub path: Option<String>,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(tag = "destination", rename_all = "snake_case")]
 pub enum OutputConfig {
@@ -67,6 +78,8 @@ impl Default for LoggingConfig {
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
+    #[serde(default)]
+    pub input: InputConfig,
     #[serde(default)]
     pub output: OutputConfig,
     #[serde(default)]

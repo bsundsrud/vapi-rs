@@ -1,6 +1,6 @@
 [package]
 name = "vapi"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Benn Sundsrud <benn.sundsrud@gmail.com>"]
 edition = "2018"
 
@@ -10,3 +10,4 @@ edition = "2018"
 vapi-sys = { path = "../vapi-sys" }
 thiserror = "1.0.26"
 crossbeam-channel = "0.5.1"
+tracing = "0.1.26"

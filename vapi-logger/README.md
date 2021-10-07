@@ -26,6 +26,13 @@ The config is in TOML format.
 Example:
 
 ```
+# the [input] section controls the connection to Varnish
+[input]
+# the directory for the varnish instance. Default is /var/lib/varnish/<hostname>
+path = /path/to/varnish/instance_dir
+# how long to wait to connect to the varnish instance before failing
+connect_timeout_secs = 10
+
 # the [output] section controls the JSON output
 [output]
 

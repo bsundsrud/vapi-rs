@@ -193,12 +193,14 @@ pub enum Reason {
     Fetch,
     BgFetch,
     Pipe,
+    NotHandled(u32),
 }
 
 impl From<u32> for Reason {
     fn from(c: u32) -> Reason {
         use Reason::*;
         match c {
+            0 => Unknown,
             1 => Http1,
             2 => RxReq,
             3 => Esi,
@@ -207,7 +209,7 @@ impl From<u32> for Reason {
             6 => Fetch,
             7 => BgFetch,
             8 => Pipe,
-            _ => Unknown,
+            v @ _ => NotHandled(v),
         }
     }
 }

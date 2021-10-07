@@ -52,7 +52,10 @@ fn main() -> Result<()> {
                 }
                 recv(rx_reacquired) -> res => match res {
                     Ok(_) => error!("Log overrun!"),
-                    Err(e) => error!("Watchdog channel error: {}", e)
+                    Err(e) => {
+                        error!("Watchdog channel error: {}", e);
+                        break;
+                    },
                 }
             }
         });
@@ -60,17 +63,28 @@ fn main() -> Result<()> {
         let log_transform = LogTransform::new().from_config(&config.logging);
 
         let log_query = config.logging.query.clone();
+        let output_config = config.output;
         let log_consumer = s.spawn(move |_| {
-            transform::consume_logs_forever(log_transform, &config.output, log_rx);
+            transform::consume_logs_forever(log_transform, &output_config, log_rx);
         });
+        let input_config = config.input;
 
         let handle = s.spawn(move |_| {
             let mut varnish = Varnish::builder();
-            varnish.timeout(Duration::from_secs(5));
+            varnish.timeout(Duration::from_secs(input_config.connect_timeout_secs));
+            if let Some(path) = input_config.path {
+                varnish.path(&path);
+            }
+            let varnish = match varnish.build() {
+                Ok(v) => v,
+                Err(e) => {
+                    error!("Couldn't connect to varnish: {}", e);
+                    return Err(e);
+                }
+            };
 
-            let varnish = varnish.build()?;
             let opts = CursorOpts::new().batch();
-            varnish
+            let res = varnish
                 .log_builder()
                 .query(&log_query)
                 .opts(opts)
@@ -84,7 +98,12 @@ fn main() -> Result<()> {
                         CallbackResult::Continue
                     }),
                     Some(rx),
-                )
+                );
+            match res {
+                Err(ref e) => error!("Varnish logging failed: {}", e),
+                _ => {}
+            }
+            res
         });
         let tcp_handle = s.spawn(|_| {});
         let _ = handle.join();
