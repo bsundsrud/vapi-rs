@@ -165,8 +165,7 @@ impl LogTransform {
                     let lower_header = k.to_lowercase();
                     if let IpSource::Header { name } = &self.ip_source {
                         if lower_header == *name {
-                            let forwarded_for = parsers::forwarded_for(&v)?;
-                            remoteip = Some(forwarded_for);
+                            remoteip = Some(parsers::remote_ip(&v)?);
                         }
                     }
                     if self.req_header_list.contains(&lower_header) {
@@ -355,6 +354,20 @@ fn send_to_tcp(
     }
 }
 
+fn null_consumer(t: LogTransform, rx: Receiver<LogTransaction>) -> Result<()> {
+    loop {
+        select! {
+            recv(rx) -> res => {
+                let log = res?;
+                match t.transform(log) {
+                    Ok(_) => {}
+                    Err(e) => { error!("Error in transform: {}", e)}
+                }
+            }
+        }
+    }
+}
+
 pub fn consume_logs_forever(t: LogTransform, output: &OutputConfig, rx: Receiver<LogTransaction>) {
     let res = match output {
         OutputConfig::Stdout => send_to_stdout(t, rx),
@@ -371,6 +384,7 @@ pub fn consume_logs_forever(t: LogTransform, output: &OutputConfig, rx: Receiver
             *connect_timeout_secs,
             *retry_interval_secs,
         ),
+        OutputConfig::Null => null_consumer(t, rx),
     };
     if let Err(e) = res {
         error!("Output failure: {}", e);

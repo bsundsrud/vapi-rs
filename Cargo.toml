@@ -5,3 +5,5 @@ members = [
         "vapi",
         "vapi-logger"
 ]
+[profile.release]
+debug = 1

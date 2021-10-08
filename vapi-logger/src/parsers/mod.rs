@@ -52,14 +52,22 @@ pub fn reqstart(input: &str) -> Result<ReqStart> {
     Ok(rs)
 }
 
-fn parse_forwarded_for(input: &str) -> IResult<&str, &str> {
+fn parse_remote_ip(input: &str) -> IResult<&str, &str> {
     let (rest, ip) = take_while(|c: char| c != ',')(input)?;
     Ok((rest, ip))
 }
 
-pub fn forwarded_for(input: &str) -> Result<String> {
-    let (_, ip) =
-        parse_forwarded_for(input).map_err(|e| anyhow!("Invalid X-Forwarded-For: {}", e))?;
+pub fn remote_ip(input: &str) -> Result<String> {
+    let (_, ip) = parse_remote_ip(input).map_err(|e| anyhow!("Invalid remote IP: {}", e))?;
+    let ip = if ip.contains('.') {
+        if let Some(idx) = ip.find(':') {
+            &ip[..idx]
+        } else {
+            ip
+        }
+    } else {
+        ip
+    };
     Ok(ip.to_string())
 }
 
@@ -255,14 +263,19 @@ mod test {
     use super::*;
 
     #[test]
-    fn test_forwarded_for() {
+    fn test_remote_ip() {
         let test_cases = vec![
             ("127.0.0.1", "127.0.0.1"),
+            ("127.0.0.1:7000", "127.0.0.1"),
+            (
+                "abcd:0000:1234:1:23:f33:320, 10.0.0.1",
+                "abcd:0000:1234:1:23:f33:320",
+            ),
             ("127.0.0.1, 10.0.0.5", "127.0.0.1"),
             ("127.0.0.1,10.0.0.5,169.172.0.2", "127.0.0.1"),
         ];
         for (t, e) in test_cases {
-            let (_rest, out) = parse_forwarded_for(&t).unwrap();
+            let out = remote_ip(&t).unwrap();
             assert_eq!(out, e);
         }
     }
@@ -345,7 +358,6 @@ mod test {
     fn test_ttl_rfc() {
         let input = "RFC 60 10 -1 1312966109 1312966109 1312966109 0 60 cacheable";
         let res = parse_ttl(&input);
-        dbg!(&res);
         assert!(res.is_ok());
         let (rest, ttl) = res.unwrap();
         assert_eq!(rest, "");

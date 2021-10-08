@@ -68,7 +68,7 @@ fn main() -> Result<()> {
             transform::consume_logs_forever(log_transform, &output_config, log_rx);
         });
         let input_config = config.input;
-
+        let logging_config = config.logging;
         let handle = s.spawn(move |_| {
             let mut varnish = Varnish::builder();
             varnish.timeout(Duration::from_secs(input_config.connect_timeout_secs));
@@ -83,12 +83,15 @@ fn main() -> Result<()> {
                 }
             };
 
-            let opts = CursorOpts::new().batch();
+            let mut opts = CursorOpts::new().batch();
+            if logging_config.tail {
+                opts = opts.tail();
+            }
             let res = varnish
                 .log_builder()
                 .query(&log_query)
                 .opts(opts)
-                .grouping(LogGrouping::Request)
+                .grouping(logging_config.grouping)
                 .reacquire_and_signal_after_overrun(tx_reacquired)
                 .start(
                     Box::new(move |log| {

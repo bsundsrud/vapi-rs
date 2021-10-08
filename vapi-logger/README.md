@@ -72,4 +72,13 @@ ip_source = "header"
 
 # for example X-Forwarded-For or CF-Connecting-IP
 ip_source_header = "X-Forwarded-For"
+
+# Selects the log grouping type.  Default is "Vxid", possible values are "Request", or "Vxid"
+grouping = "Request"
+
+# Setting tail = true will start the cursor at the head of the logs on startup, ignoring what's currently in the buffer.
+# Setting tail = false will read all logs from the beginning of the buffer on startup.
+# tail = true may lose logs between restarts, tail = false may duplicate logs between restarts
+# default is true
+tail = true
 ```

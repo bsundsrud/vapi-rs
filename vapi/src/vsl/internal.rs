@@ -62,7 +62,6 @@ impl VslQ {
         if vslq.is_null() {
             return Err(VarnishError::from_vsl_error(&vsl));
         }
-
         Ok(VslQ { vslq })
     }
 
@@ -74,7 +73,6 @@ impl VslQ {
         if vslq.is_null() {
             return Err(VarnishError::from_vsl_error(&vsl));
         }
-
         Ok(VslQ { vslq })
     }
 
@@ -261,10 +259,9 @@ pub(crate) fn query_loop(
                 }
             }
         }
-        let res = unsafe {
-            let callback = &callback as *const LogCallback as *mut std::ffi::c_void;
-            vapi_sys::VSLQ_Dispatch(vslq.vslq, Some(rust_callback), callback)
-        };
+        let callback = &callback as *const LogCallback as *mut std::ffi::c_void;
+        let res = unsafe { vapi_sys::VSLQ_Dispatch(vslq.vslq, Some(rust_callback), callback) };
+
         let should_stop = stop
             .as_ref()
             .map(|r| match r.try_recv() {
@@ -281,30 +278,34 @@ pub(crate) fn query_loop(
         if should_stop {
             return Ok(());
         }
-        match res {
-            0 => {
-                std::thread::sleep(Duration::from_millis(10));
-                continue;
-            }
-            1 => continue,
-            -1 => break,
-            -2 => {
+        if res == vapi_sys::vsl_status_vsl_more {
+            continue;
+        } else if res == vapi_sys::vsl_status_vsl_end {
+            std::thread::sleep(Duration::from_millis(10));
+            continue;
+        } else if res == vapi_sys::vsl_status_vsl_e_eof {
+            break;
+        }
+
+        unsafe { vapi_sys::VSLQ_Flush(vslq.vslq, Some(rust_callback), callback) };
+
+        if res == vapi_sys::vsl_status_vsl_e_abandon {
+            vslq.clear_cursor();
+            cursor = None
+        } else if res == vapi_sys::vsl_status_vsl_e_overrun {
+            if reacquire_on_overrun {
                 vslq.clear_cursor();
-                cursor = None
-            }
-            -3 => {
-                if reacquire_on_overrun {
-                    vslq.clear_cursor();
-                    cursor = None;
-                    if let Some(ref tx) = reacquire_signal {
-                        tx.send(()).map_err(|_| VarnishError::LogOverrun)?;
-                    }
-                } else {
-                    return Err(VarnishError::LogOverrun);
+                cursor = None;
+                if let Some(ref tx) = reacquire_signal {
+                    tx.send(()).map_err(|_| VarnishError::LogOverrun)?;
                 }
+            } else {
+                return Err(VarnishError::LogOverrun);
             }
-            -4 => return Err(VarnishError::IOError),
-            e => return Err(VarnishError::UserStatus(e)),
+        } else if res == vapi_sys::vsl_status_vsl_e_io {
+            return Err(VarnishError::IOError);
+        } else {
+            return Err(VarnishError::UserStatus(res));
         }
     }
 

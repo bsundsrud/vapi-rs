@@ -51,7 +51,6 @@ impl SharedMem {
             }
             vsm
         };
-
         Ok(SharedMem { vsm })
     }
 

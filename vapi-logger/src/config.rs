@@ -1,6 +1,6 @@
-use std::collections::HashMap;
-
 use serde::Deserialize;
+use std::collections::HashMap;
+use vapi::LogGrouping;
 
 fn default_connect_timeout() -> u64 {
     5
@@ -33,6 +33,7 @@ pub enum OutputConfig {
         #[serde(default = "default_retry_interval")]
         retry_interval_secs: u64,
     },
+    Null,
 }
 
 impl Default for OutputConfig {
@@ -51,6 +52,13 @@ pub enum IpSource {
     },
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Deserialize)]
+#[serde(remote = "LogGrouping")]
+pub enum Grouping {
+    Vxid,
+    Request,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(default)]
 pub struct LoggingConfig {
@@ -61,6 +69,9 @@ pub struct LoggingConfig {
     pub query: String,
     #[serde(flatten)]
     pub ip_source: IpSource,
+    #[serde(with = "Grouping")]
+    pub grouping: LogGrouping,
+    pub tail: bool,
 }
 
 impl Default for LoggingConfig {
@@ -72,6 +83,8 @@ impl Default for LoggingConfig {
             tags: HashMap::new(),
             query: String::new(),
             ip_source: IpSource::Request,
+            grouping: LogGrouping::Vxid,
+            tail: true,
         }
     }
 }
