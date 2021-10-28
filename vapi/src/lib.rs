@@ -1,6 +1,6 @@
 pub mod error;
 pub mod vapi;
-mod vsl;
+pub mod vsl;
 mod vsm;
 
 pub use crate::vapi::Varnish;

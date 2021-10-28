@@ -1,6 +1,7 @@
 use anyhow::Result;
 use config::Config;
 use crossbeam::thread;
+use crossbeam_channel::bounded;
 use crossbeam_channel::{select, unbounded};
 use std::fs::File;
 use std::io::prelude::*;
@@ -8,12 +9,13 @@ use std::io::BufReader;
 use std::path::Path;
 use structopt::StructOpt;
 use tracing::{error, info};
-use transform::LogTransform;
 use vapi::prelude::*;
+use vapi::vsl::LogRecord;
 
 mod parsers;
 use std::{path::PathBuf, time::Duration};
 use tracing_subscriber::EnvFilter;
+
 mod config;
 mod models;
 mod output;
@@ -59,13 +61,13 @@ fn main() -> Result<()> {
                 }
             }
         });
-        let (log_tx, log_rx) = unbounded::<LogTransaction>();
-        let log_transform = LogTransform::new().from_config(&config.logging);
+        let (log_tx, log_rx) = bounded::<LogRecord>(1000);
+        let log_transform = config::transform_from_config(&config.logging);
 
         let log_query = config.logging.query.clone();
         let output_config = config.output;
         let log_consumer = s.spawn(move |_| {
-            transform::consume_logs_forever(log_transform, &output_config, log_rx);
+            transform::consume_logs_forever(&output_config, log_rx);
         });
         let input_config = config.input;
         let logging_config = config.logging;
@@ -87,21 +89,28 @@ fn main() -> Result<()> {
             if logging_config.tail {
                 opts = opts.tail();
             }
+
+            let type_filter: Vec<TxType> = logging_config
+                .type_filter
+                .iter()
+                .map(|&t| t.into())
+                .collect();
+
+            let reason_filter: Vec<Reason> = logging_config
+                .reason_filter
+                .iter()
+                .map(|&t| t.into())
+                .collect();
+
             let res = varnish
                 .log_builder()
                 .query(&log_query)
                 .opts(opts)
                 .grouping(logging_config.grouping)
+                .type_filter(type_filter)
+                .reason_filter(reason_filter)
                 .reacquire_and_signal_after_overrun(tx_reacquired)
-                .start(
-                    Box::new(move |log| {
-                        if let Err(e) = log_tx.send(log) {
-                            error!("Couldn't send log line: {}", e);
-                        }
-                        CallbackResult::Continue
-                    }),
-                    Some(rx),
-                );
+                .start(log_tx, Some(rx), log_transform);
             match res {
                 Err(ref e) => error!("Varnish logging failed: {}", e),
                 _ => {}

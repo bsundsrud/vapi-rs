@@ -1,13 +1,17 @@
+use super::transform::LogTransform;
 use super::{
-    CallbackResult, LogCallback, LogGrouping, LogLine, LogTransaction, Reason, RecordType, TxType,
+    CallbackResult, LogCallback, LogGrouping, LogLine, LogRecord, LogTransaction, Reason,
+    RecordType, TxType,
 };
 use crate::error::{Result, VarnishError};
 use crate::vsm::{vsm_status, OpenVSM};
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
+use std::collections::HashMap;
 use std::ffi::{CStr, CString};
 use std::ptr;
-use std::time::Duration;
-use tracing::warn;
+use std::sync::{Arc, Mutex, RwLock};
+use std::time::{Duration, Instant};
+use tracing::{error, warn};
 use vapi_sys;
 
 // from vapi/vsl_int.h
@@ -132,6 +136,21 @@ enum CursorStatus {
     Match(LogLine),
     NoMatch,
 }
+
+pub(crate) enum CursorResult<'rec> {
+    NoData,
+    NoMatch,
+    Error(i32),
+    Match(TagData<'rec>),
+}
+
+pub(crate) struct TagData<'rec> {
+    pub vxid: u32,
+    pub tag: &'rec CStr,
+    pub data: &'rec CStr,
+    pub ty: RecordType,
+}
+
 impl VslTransaction {
     unsafe fn new(
         tx: *mut vapi_sys::VSL_transaction,
@@ -145,7 +164,78 @@ impl VslTransaction {
             Ok(VslTransaction { tx, vsl })
         }
     }
-    fn next_record(&self) -> Option<std::result::Result<CursorStatus, i32>> {
+
+    fn advance_next(&mut self) -> Result<bool, i32> {
+        let status = unsafe {
+            assert!(!self.tx.is_null());
+            let c = (*self.tx).c;
+            vapi_sys::VSL_Next(c)
+        };
+        if status < 0 {
+            Err(status)
+        } else if status == 0 {
+            Ok(false)
+        } else {
+            Ok(true)
+        }
+    }
+
+    fn vsl_match(&self) -> bool {
+        let matches = unsafe {
+            assert!(!self.tx.is_null());
+            vapi_sys::VSL_Match(self.vsl, (*self.tx).c)
+        };
+        matches == 1
+    }
+
+    fn read_tag_data(&self) -> TagData {
+        let rec_ptr = unsafe {
+            assert!(!self.tx.is_null());
+            assert!(!(*self.tx).c.is_null());
+            (*(*self.tx).c).rec.ptr
+        };
+        let header: &[u32] = unsafe { std::slice::from_raw_parts(rec_ptr, 2) };
+        let tag: u32 = header[0] >> 24;
+        let tag = unsafe { CStr::from_ptr(vapi_sys::VSL_tags[tag as usize]) };
+
+        let vxid = header[1] & VSL_IDENTMASK;
+        let data_length: u32 = header[0] & VSL_LENMASK;
+        let is_client: u32 = header[1] & VSL_CLIENTMARKER;
+        let is_backend: u32 = header[1] & VSL_BACKENDMARKER;
+        let ty = if is_client > 0 {
+            RecordType::Client
+        } else if is_backend > 0 {
+            RecordType::Backend
+        } else {
+            RecordType::Other
+        };
+        let data: &[u32] = unsafe { std::slice::from_raw_parts(rec_ptr, data_length as usize + 2) };
+        let data = &data[2..];
+        let data: &[u8] = as_u8_slice(&data, data_length);
+        let data = unsafe { CStr::from_bytes_with_nul_unchecked(data) };
+
+        TagData {
+            vxid,
+            tag,
+            data,
+            ty,
+        }
+    }
+
+    pub(crate) fn read_next_record(&mut self) -> CursorResult {
+        match self.advance_next() {
+            Ok(false) => return CursorResult::NoData,
+            Err(status) => return CursorResult::Error(status),
+            Ok(true) => {}
+        }
+        if self.vsl_match() {
+            CursorResult::Match(self.read_tag_data())
+        } else {
+            CursorResult::NoMatch
+        }
+    }
+
+    fn next_record(&self) -> Option<Result<CursorStatus, i32>> {
         let status = unsafe {
             let c = (*self.tx).c;
             vapi_sys::VSL_Next(c)
@@ -167,23 +257,23 @@ impl VslTransaction {
         }
     }
 
-    fn level(&self) -> u32 {
+    pub(crate) fn level(&self) -> u32 {
         unsafe { (*self.tx).level }
     }
 
-    fn vxid(&self) -> u32 {
+    pub(crate) fn vxid(&self) -> u32 {
         unsafe { (*self.tx).vxid }
     }
 
-    fn parent_vxid(&self) -> u32 {
+    pub(crate) fn parent_vxid(&self) -> u32 {
         unsafe { (*self.tx).vxid_parent }
     }
 
-    fn ty(&self) -> TxType {
+    pub(crate) fn ty(&self) -> TxType {
         unsafe { (*self.tx).type_.into() }
     }
 
-    fn reason(&self) -> Reason {
+    pub(crate) fn reason(&self) -> Reason {
         unsafe { (*self.tx).reason.into() }
     }
 
@@ -232,7 +322,10 @@ pub(crate) fn query_loop(
     cursor_opts: u32,
     reacquire_on_overrun: bool,
     reacquire_signal: Option<Sender<()>>,
-    callback: LogCallback,
+    log_sender: Sender<LogRecord>,
+    type_filter: Vec<TxType>,
+    reason_filter: Vec<Reason>,
+    transform: LogTransform,
     stop: Option<Receiver<()>>,
 ) -> Result<()> {
     let mut vsl = Vsl::new()?;
@@ -242,6 +335,12 @@ pub(crate) fn query_loop(
         VslQ::new(&vsl, grouping)?
     };
     let mut cursor = None;
+    let callback_data = CallbackData {
+        log_sender,
+        type_filter,
+        reason_filter,
+        transform,
+    };
     loop {
         if vsm.status() & vsm_status::VSM_WRK_RESTARTED != 0 && cursor.is_some() {
             vslq.clear_cursor();
@@ -259,22 +358,25 @@ pub(crate) fn query_loop(
                 }
             }
         }
-        let callback = &callback as *const LogCallback as *mut std::ffi::c_void;
-        let res = unsafe { vapi_sys::VSLQ_Dispatch(vslq.vslq, Some(rust_callback), callback) };
+        let callback = &callback_data as *const CallbackData as *mut std::ffi::c_void;
+        let mut res = vapi_sys::vsl_status_vsl_more;
+        let mut should_stop = false;
+        while res == vapi_sys::vsl_status_vsl_more && !should_stop {
+            res = unsafe { vapi_sys::VSLQ_Dispatch(vslq.vslq, Some(rust_dispatch), callback) };
 
-        let should_stop = stop
-            .as_ref()
-            .map(|r| match r.try_recv() {
-                // received signal, stop
-                Ok(_) => true,
-                // didn't receive anything, keep going
-                Err(TryRecvError::Empty) => false,
-                // channel is closed or errored, stop
-                _ => true,
-            })
-            // if there's no channel, don't stop ever
-            .unwrap_or(false);
-
+            should_stop = stop
+                .as_ref()
+                .map(|r| match r.try_recv() {
+                    // received signal, stop
+                    Ok(_) => true,
+                    // didn't receive anything, keep going
+                    Err(TryRecvError::Empty) => false,
+                    // channel is closed or errored, stop
+                    _ => true,
+                })
+                // if there's no channel, don't stop ever
+                .unwrap_or(false);
+        }
         if should_stop {
             return Ok(());
         }
@@ -287,7 +389,7 @@ pub(crate) fn query_loop(
             break;
         }
 
-        unsafe { vapi_sys::VSLQ_Flush(vslq.vslq, Some(rust_callback), callback) };
+        unsafe { vapi_sys::VSLQ_Flush(vslq.vslq, Some(rust_dispatch), callback) };
 
         if res == vapi_sys::vsl_status_vsl_e_abandon {
             vslq.clear_cursor();
@@ -296,7 +398,7 @@ pub(crate) fn query_loop(
             if reacquire_on_overrun {
                 vslq.clear_cursor();
                 cursor = None;
-                if let Some(ref tx) = reacquire_signal {
+                if let Some(tx) = reacquire_signal.as_ref() {
                     tx.send(()).map_err(|_| VarnishError::LogOverrun)?;
                 }
             } else {
@@ -304,21 +406,44 @@ pub(crate) fn query_loop(
             }
         } else if res == vapi_sys::vsl_status_vsl_e_io {
             return Err(VarnishError::IOError);
+        } else if res == -6 {
+            return Err(VarnishError::CallbackError("Log channel error".into()));
+        } else if res == -7 {
+            return Err(VarnishError::CallbackError(
+                "Log transformation error".into(),
+            ));
         } else {
             return Err(VarnishError::UserStatus(res));
         }
     }
-
     Ok(())
 }
 
+#[repr(C)]
+struct CallbackData {
+    log_sender: Sender<LogRecord>,
+    type_filter: Vec<TxType>,
+    reason_filter: Vec<Reason>,
+    transform: LogTransform,
+}
+
+impl CallbackData {
+    fn allow_type(&self, ty: TxType) -> bool {
+        self.type_filter.is_empty() || self.type_filter.contains(&ty)
+    }
+
+    fn allow_reason(&self, reason: Reason) -> bool {
+        self.reason_filter.is_empty() || self.reason_filter.contains(&reason)
+    }
+}
+
 #[no_mangle]
-unsafe extern "C" fn rust_callback(
+unsafe extern "C" fn rust_dispatch(
     vsl: *mut vapi_sys::VSL_data,
     mut tx: *const *mut vapi_sys::VSL_transaction,
     priv_: *mut std::os::raw::c_void,
 ) -> std::os::raw::c_int {
-    let callback: &LogCallback = &*(priv_ as *const LogCallback);
+    let callback_data: &CallbackData = &*(priv_ as *const CallbackData);
     loop {
         if tx.is_null() {
             break;
@@ -327,40 +452,24 @@ unsafe extern "C" fn rust_callback(
         if t.is_null() {
             break;
         }
-        let mut data = Vec::new();
+
         let this_tx = match VslTransaction::new(t, vsl) {
             Ok(t) => t,
             Err(e) => panic!("Tried to create Tx from null data: {}", e),
         };
-        let level = this_tx.level();
-        let vxid = this_tx.vxid();
-        let parent_vxid = this_tx.parent_vxid();
-        let ty = this_tx.ty();
-        let reason = this_tx.reason();
-        while let Some(r) = this_tx.next_record() {
-            match r {
-                Ok(CursorStatus::NoMatch) => {
-                    continue;
+        match callback_data.transform.process_txn(this_tx) {
+            Ok(Some(log)) => match callback_data.log_sender.send(log) {
+                Ok(_) => {}
+                Err(e) => {
+                    error!("Failed to send log data: {}", e);
+                    return -6;
                 }
-                Ok(CursorStatus::Match(line)) => {
-                    data.push(line);
-                }
-                Err(i) => {
-                    return i;
-                }
+            },
+            Ok(None) => {}
+            Err(e) => {
+                error!("Failed to process log message: {}", e);
+                return -7;
             }
-        }
-        let txn = LogTransaction {
-            level,
-            vxid,
-            parent_vxid,
-            ty,
-            reason,
-            data,
-        };
-        match callback(txn) {
-            CallbackResult::Continue => {}
-            CallbackResult::Stop(res) => return res,
         }
 
         tx = tx.add(1);

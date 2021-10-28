@@ -1,4 +1,11 @@
 pub(crate) mod internal;
+pub mod models;
+pub(crate) mod parsers;
+pub mod transform;
+
+pub use models::*;
+
+use std::time::Instant;
 
 use crate::error::Result;
 use crate::vsm::OpenVSM;
@@ -6,6 +13,8 @@ use crossbeam_channel::{Receiver, Sender};
 use internal::query_loop;
 
 use vapi_sys;
+
+use self::transform::LogTransform;
 
 pub type LogCallback = Box<dyn Fn(LogTransaction) -> CallbackResult>;
 
@@ -99,16 +108,24 @@ pub(crate) struct VarnishLogBuilder {
     cursor_opts: CursorOpts,
     reacquire: bool,
     reacquire_signal: Option<Sender<()>>,
+    type_filter: Vec<TxType>,
+    reason_filter: Vec<Reason>,
+    log_sender: Sender<LogRecord>,
+    transform: LogTransform,
 }
 
 impl VarnishLogBuilder {
-    pub fn new() -> VarnishLogBuilder {
+    pub fn new(log_sender: Sender<LogRecord>, transform: LogTransform) -> VarnishLogBuilder {
         VarnishLogBuilder {
             grouping: LogGrouping::Vxid,
             query: None,
             cursor_opts: CursorOpts::new(),
             reacquire: false,
             reacquire_signal: None,
+            type_filter: Vec::new(),
+            reason_filter: Vec::new(),
+            log_sender,
+            transform,
         }
     }
     pub fn grouping(&mut self, grouping: LogGrouping) -> &mut Self {
@@ -126,22 +143,28 @@ impl VarnishLogBuilder {
         self
     }
 
+    pub fn type_filter<V: Into<Vec<TxType>>>(&mut self, types: V) -> &mut Self {
+        self.type_filter = types.into();
+        self
+    }
+
+    pub fn reason_filter<V: Into<Vec<Reason>>>(&mut self, reasons: V) -> &mut Self {
+        self.reason_filter = reasons.into();
+        self
+    }
+
     pub fn reacquire_if_overrun(&mut self) -> &mut Self {
         self.reacquire = true;
         self
     }
 
     pub fn reacquire_and_notify_if_overrun(&mut self, tx: Sender<()>) -> &mut Self {
+        self.reacquire = true;
         self.reacquire_signal = Some(tx);
         self
     }
 
-    pub fn execute(
-        self,
-        vsm: &OpenVSM,
-        callback: LogCallback,
-        stop_channel: Option<Receiver<()>>,
-    ) -> Result<()> {
+    pub fn execute(self, vsm: &OpenVSM, stop_channel: Option<Receiver<()>>) -> Result<()> {
         query_loop(
             vsm,
             self.grouping,
@@ -149,7 +172,10 @@ impl VarnishLogBuilder {
             self.cursor_opts.into(),
             self.reacquire,
             self.reacquire_signal,
-            callback,
+            self.log_sender,
+            self.type_filter,
+            self.reason_filter,
+            self.transform,
             stop_channel,
         )
     }
@@ -160,61 +186,10 @@ pub enum CallbackResult {
     Continue,
     Stop(i32),
 }
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum TxType {
-    Unknown,
-    Session,
-    Request,
-    BackendRequest,
-    Raw,
-}
 
-impl From<u32> for TxType {
-    fn from(c: u32) -> TxType {
-        use TxType::*;
-        match c {
-            1 => Session,
-            2 => Request,
-            3 => BackendRequest,
-            4 => Raw,
-            _ => Unknown,
-        }
-    }
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum Reason {
-    Unknown,
-    Http1,
-    RxReq,
-    Esi,
-    Restart,
-    Pass,
-    Fetch,
-    BgFetch,
-    Pipe,
-    NotHandled(u32),
-}
-
-impl From<u32> for Reason {
-    fn from(c: u32) -> Reason {
-        use Reason::*;
-        match c {
-            0 => Unknown,
-            1 => Http1,
-            2 => RxReq,
-            3 => Esi,
-            4 => Restart,
-            5 => Pass,
-            6 => Fetch,
-            7 => BgFetch,
-            8 => Pipe,
-            v @ _ => NotHandled(v),
-        }
-    }
-}
 #[derive(Debug)]
 pub struct LogTransaction {
+    pub started: Instant,
     pub level: u32,
     pub vxid: u32,
     pub parent_vxid: u32,

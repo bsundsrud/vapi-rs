@@ -14,6 +14,8 @@ pub enum VarnishError {
     IOError,
     #[error("User Status code {0}")]
     UserStatus(i32),
+    #[error("Callback Error: {0}")]
+    CallbackError(String),
 }
 
 impl VarnishError {
@@ -38,4 +40,4 @@ impl VarnishError {
     }
 }
 
-pub type Result<T> = core::result::Result<T, VarnishError>;
+pub type Result<T, E = VarnishError> = core::result::Result<T, E>;

@@ -45,6 +45,9 @@ host = "127.0.0.1"
 # port of remote server. Required if destination = "tcp"
 port = 12345
 
+# number of threads to start to send logs if destination = "tcp". Default is 2
+sender_threads = 1
+
 
 # the [logging] section controls what gets logged
 [logging]
@@ -81,4 +84,12 @@ grouping = "Request"
 # tail = true may lose logs between restarts, tail = false may duplicate logs between restarts
 # default is true
 tail = true
+
+# List of log record types to collect.  A list containing zero or more of "Request", "BackendRequest", "Session", "Raw".
+# Default is [], which captures all records.
+type_filter = [ "Request" ]
+
+# List of log reasons to collect. Valid values: "Unknown", "Http1", "RxReq", "Esi", "Restart", "Pass", "Fetch", "BgFetch", "Pipe"
+# Default is [], which captures all records.
+reason_filter = [ "RxReq" ]
 ```

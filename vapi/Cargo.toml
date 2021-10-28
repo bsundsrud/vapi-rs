@@ -11,3 +11,6 @@ vapi-sys = { path = "../vapi-sys" }
 thiserror = "1.0.26"
 crossbeam-channel = "0.5.1"
 tracing = "0.1.26"
+serde = { version = "1.0.127", features = ["derive"] }
+nom = "7.0.0"
+anyhow = "1.0.44"

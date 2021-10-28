@@ -1,6 +1,8 @@
 use crate::error::Result;
-use crate::vsl::{CursorOpts, LogCallback, LogGrouping, VarnishLogBuilder};
+use crate::vsl::transform::LogTransform;
+use crate::vsl::{CursorOpts, LogCallback, LogGrouping, LogRecord, VarnishLogBuilder};
 use crate::vsm::{OpenVSM, VSMBuilder};
+use crate::{Reason, TxType};
 use crossbeam_channel::{Receiver, Sender};
 use std::time::Duration;
 
@@ -62,6 +64,8 @@ pub struct LoggingBuilder<'vsm> {
     grouping: LogGrouping,
     reacquire: bool,
     reacquire_signal: Option<Sender<()>>,
+    type_filter: Vec<TxType>,
+    reason_filter: Vec<Reason>,
 }
 
 impl<'vsm> LoggingBuilder<'vsm> {
@@ -73,6 +77,8 @@ impl<'vsm> LoggingBuilder<'vsm> {
             grouping: LogGrouping::Vxid,
             reacquire: false,
             reacquire_signal: None,
+            type_filter: Vec::new(),
+            reason_filter: Vec::new(),
         }
     }
 
@@ -94,6 +100,16 @@ impl<'vsm> LoggingBuilder<'vsm> {
         self
     }
 
+    pub fn type_filter<V: Into<Vec<TxType>>>(mut self, types: V) -> Self {
+        self.type_filter = types.into();
+        self
+    }
+
+    pub fn reason_filter<V: Into<Vec<Reason>>>(mut self, reasons: V) -> Self {
+        self.reason_filter = reasons.into();
+        self
+    }
+
     pub fn reacquire_after_overrun(mut self) -> Self {
         self.reacquire = true;
         self
@@ -105,8 +121,13 @@ impl<'vsm> LoggingBuilder<'vsm> {
         self
     }
 
-    pub fn start(self, callback: LogCallback, stop_channel: Option<Receiver<()>>) -> Result<()> {
-        let mut builder = VarnishLogBuilder::new();
+    pub fn start(
+        self,
+        log_sender: Sender<LogRecord>,
+        stop_channel: Option<Receiver<()>>,
+        transform: LogTransform,
+    ) -> Result<()> {
+        let mut builder = VarnishLogBuilder::new(log_sender, transform);
         builder.grouping(self.grouping);
         builder.cursor_opts(self.opts);
         if let Some(tx) = self.reacquire_signal {
@@ -117,6 +138,8 @@ impl<'vsm> LoggingBuilder<'vsm> {
         if let Some(query) = self.query {
             builder.query(query);
         }
-        builder.execute(self.vsm, callback, stop_channel)
+        builder.type_filter(self.type_filter);
+        builder.reason_filter(self.reason_filter);
+        builder.execute(self.vsm, stop_channel)
     }
 }
