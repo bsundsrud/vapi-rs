@@ -1,6 +1,6 @@
 use crate::error::Result;
 use crate::vsl::transform::LogTransform;
-use crate::vsl::{CursorOpts, LogCallback, LogGrouping, LogRecord, VarnishLogBuilder};
+use crate::vsl::{CursorOpts, LogGrouping, LogRecord, VarnishLogBuilder};
 use crate::vsm::{OpenVSM, VSMBuilder};
 use crate::{Reason, TxType};
 use crossbeam_channel::{Receiver, Sender};
@@ -9,6 +9,7 @@ use std::time::Duration;
 pub struct Varnish {
     shm: OpenVSM,
 }
+
 #[derive(Default, Debug)]
 pub struct Builder {
     path: Option<String>,

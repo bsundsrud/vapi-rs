@@ -173,8 +173,6 @@ impl VarnishLogBuilder {
             self.reacquire,
             self.reacquire_signal,
             self.log_sender,
-            self.type_filter,
-            self.reason_filter,
             self.transform,
             stop_channel,
         )

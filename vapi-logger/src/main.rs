@@ -12,12 +12,10 @@ use tracing::{error, info};
 use vapi::prelude::*;
 use vapi::vsl::LogRecord;
 
-mod parsers;
 use std::{path::PathBuf, time::Duration};
 use tracing_subscriber::EnvFilter;
 
 mod config;
-mod models;
 mod output;
 mod transform;
 

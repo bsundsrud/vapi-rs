@@ -1,16 +1,11 @@
 use super::transform::LogTransform;
-use super::{
-    CallbackResult, LogCallback, LogGrouping, LogLine, LogRecord, LogTransaction, Reason,
-    RecordType, TxType,
-};
+use super::{LogGrouping, LogRecord, Reason, RecordType, TxType};
 use crate::error::{Result, VarnishError};
 use crate::vsm::{vsm_status, OpenVSM};
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
-use std::collections::HashMap;
 use std::ffi::{CStr, CString};
 use std::ptr;
-use std::sync::{Arc, Mutex, RwLock};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tracing::{error, warn};
 use vapi_sys;
 
@@ -131,12 +126,6 @@ pub struct VslTransaction {
     vsl: *mut vapi_sys::VSL_data,
 }
 
-#[derive(Debug)]
-enum CursorStatus {
-    Match(LogLine),
-    NoMatch,
-}
-
 pub(crate) enum CursorResult<'rec> {
     NoData,
     NoMatch,
@@ -235,28 +224,6 @@ impl VslTransaction {
         }
     }
 
-    fn next_record(&self) -> Option<Result<CursorStatus, i32>> {
-        let status = unsafe {
-            let c = (*self.tx).c;
-            vapi_sys::VSL_Next(c)
-        };
-        if status < 0 {
-            return Some(Err(status));
-        }
-        if status == 0 {
-            None
-        } else {
-            let matches = unsafe { vapi_sys::VSL_Match(self.vsl, (*self.tx).c) };
-            if matches == 1 {
-                Some(Ok(CursorStatus::Match(unsafe {
-                    self.get_current_record()
-                })))
-            } else {
-                Some(Ok(CursorStatus::NoMatch))
-            }
-        }
-    }
-
     pub(crate) fn level(&self) -> u32 {
         unsafe { (*self.tx).level }
     }
@@ -276,39 +243,6 @@ impl VslTransaction {
     pub(crate) fn reason(&self) -> Reason {
         unsafe { (*self.tx).reason.into() }
     }
-
-    unsafe fn get_current_record(&self) -> LogLine {
-        let rec_ptr = (*(*self.tx).c).rec.ptr;
-        let header: &[u32] = std::slice::from_raw_parts(rec_ptr, 2);
-        let tag: u32 = header[0] >> 24;
-        let tag = CStr::from_ptr(vapi_sys::VSL_tags[tag as usize])
-            .to_string_lossy()
-            .to_string();
-        //let tag: vapi_sys::VSL_tag_e = std::mem::transmute(tag);
-        //let tag: VslTag = tag.into();
-        let vxid = header[1] & VSL_IDENTMASK;
-        let data_length: u32 = header[0] & VSL_LENMASK;
-        let is_client: u32 = header[1] & VSL_CLIENTMARKER;
-        let is_backend: u32 = header[1] & VSL_BACKENDMARKER;
-        let ty = if is_client > 0 {
-            RecordType::Client
-        } else if is_backend > 0 {
-            RecordType::Backend
-        } else {
-            RecordType::Other
-        };
-        let data: &[u32] = std::slice::from_raw_parts(rec_ptr, data_length as usize + 2);
-        let data = &data[2..];
-        let data: &[u8] = as_u8_slice(&data, data_length);
-        let data = CStr::from_bytes_with_nul_unchecked(data);
-        let data = data.to_string_lossy().into_owned();
-        LogLine {
-            vxid,
-            tag,
-            data,
-            ty,
-        }
-    }
 }
 
 fn as_u8_slice(v: &[u32], len: u32) -> &[u8] {
@@ -323,8 +257,6 @@ pub(crate) fn query_loop(
     reacquire_on_overrun: bool,
     reacquire_signal: Option<Sender<()>>,
     log_sender: Sender<LogRecord>,
-    type_filter: Vec<TxType>,
-    reason_filter: Vec<Reason>,
     transform: LogTransform,
     stop: Option<Receiver<()>>,
 ) -> Result<()> {
@@ -337,8 +269,6 @@ pub(crate) fn query_loop(
     let mut cursor = None;
     let callback_data = CallbackData {
         log_sender,
-        type_filter,
-        reason_filter,
         transform,
     };
     loop {
@@ -422,19 +352,7 @@ pub(crate) fn query_loop(
 #[repr(C)]
 struct CallbackData {
     log_sender: Sender<LogRecord>,
-    type_filter: Vec<TxType>,
-    reason_filter: Vec<Reason>,
     transform: LogTransform,
-}
-
-impl CallbackData {
-    fn allow_type(&self, ty: TxType) -> bool {
-        self.type_filter.is_empty() || self.type_filter.contains(&ty)
-    }
-
-    fn allow_reason(&self, reason: Reason) -> bool {
-        self.reason_filter.is_empty() || self.reason_filter.contains(&reason)
-    }
 }
 
 #[no_mangle]
