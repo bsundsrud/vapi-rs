@@ -1,5 +1,5 @@
 FROM ubuntu:18.04
-
+ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get upgrade -y && apt-get install -y curl gnupg apt-transport-https
 
 RUN curl -L https://packagecloud.io/varnishcache/varnish60lts/gpgkey | apt-key add -

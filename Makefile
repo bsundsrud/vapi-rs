@@ -1,7 +1,7 @@
 .PHONY: build build-docker run release-build
 DOCKER_BUILD_ARGS := --build-arg UID=$(shell id -u) --build-arg GID=$(shell id -g) --build-arg UNAME=$(shell whoami)
-DOCKER_RUN_ARGS := -v "$(PWD):/home/$(shell whoami)/code"
-DOCKER_TAG := "vapi-rs:build"
+DOCKER_RUN_ARGS := --rm -v "$(PWD):/home/$(shell whoami)/code"
+DOCKER_TAG := "vapi-rs-build:latest"
 build-docker:
 	docker build $(DOCKER_BUILD_ARGS) -f Dockerfile.build -t $(DOCKER_TAG) .
 build: build-docker
