@@ -23,57 +23,22 @@ pub type __off_t = ::std::os::raw::c_long;
 pub type __off64_t = ::std::os::raw::c_long;
 pub type size_t = ::std::os::raw::c_ulong;
 pub type FILE = _IO_FILE;
-pub type _IO_lock_t = ::std::os::raw::c_void;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct _IO_marker {
-    pub _next: *mut _IO_marker,
-    pub _sbuf: *mut _IO_FILE,
-    pub _pos: ::std::os::raw::c_int,
+    _unused: [u8; 0],
 }
-#[test]
-fn bindgen_test_layout__IO_marker() {
-    assert_eq!(
-        ::std::mem::size_of::<_IO_marker>(),
-        24usize,
-        concat!("Size of: ", stringify!(_IO_marker))
-    );
-    assert_eq!(
-        ::std::mem::align_of::<_IO_marker>(),
-        8usize,
-        concat!("Alignment of ", stringify!(_IO_marker))
-    );
-    assert_eq!(
-        unsafe { &(*(::std::ptr::null::<_IO_marker>()))._next as *const _ as usize },
-        0usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(_IO_marker),
-            "::",
-            stringify!(_next)
-        )
-    );
-    assert_eq!(
-        unsafe { &(*(::std::ptr::null::<_IO_marker>()))._sbuf as *const _ as usize },
-        8usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(_IO_marker),
-            "::",
-            stringify!(_sbuf)
-        )
-    );
-    assert_eq!(
-        unsafe { &(*(::std::ptr::null::<_IO_marker>()))._pos as *const _ as usize },
-        16usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(_IO_marker),
-            "::",
-            stringify!(_pos)
-        )
-    );
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct _IO_codecvt {
+    _unused: [u8; 0],
 }
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct _IO_wide_data {
+    _unused: [u8; 0],
+}
+pub type _IO_lock_t = ::std::os::raw::c_void;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct _IO_FILE {
@@ -99,10 +64,10 @@ pub struct _IO_FILE {
     pub _shortbuf: [::std::os::raw::c_char; 1usize],
     pub _lock: *mut _IO_lock_t,
     pub _offset: __off64_t,
-    pub __pad1: *mut ::std::os::raw::c_void,
-    pub __pad2: *mut ::std::os::raw::c_void,
-    pub __pad3: *mut ::std::os::raw::c_void,
-    pub __pad4: *mut ::std::os::raw::c_void,
+    pub _codecvt: *mut _IO_codecvt,
+    pub _wide_data: *mut _IO_wide_data,
+    pub _freeres_list: *mut _IO_FILE,
+    pub _freeres_buf: *mut ::std::os::raw::c_void,
     pub __pad5: size_t,
     pub _mode: ::std::os::raw::c_int,
     pub _unused2: [::std::os::raw::c_char; 20usize],
@@ -340,43 +305,43 @@ fn bindgen_test_layout__IO_FILE() {
         )
     );
     assert_eq!(
-        unsafe { &(*(::std::ptr::null::<_IO_FILE>())).__pad1 as *const _ as usize },
+        unsafe { &(*(::std::ptr::null::<_IO_FILE>()))._codecvt as *const _ as usize },
         152usize,
         concat!(
             "Offset of field: ",
             stringify!(_IO_FILE),
             "::",
-            stringify!(__pad1)
+            stringify!(_codecvt)
         )
     );
     assert_eq!(
-        unsafe { &(*(::std::ptr::null::<_IO_FILE>())).__pad2 as *const _ as usize },
+        unsafe { &(*(::std::ptr::null::<_IO_FILE>()))._wide_data as *const _ as usize },
         160usize,
         concat!(
             "Offset of field: ",
             stringify!(_IO_FILE),
             "::",
-            stringify!(__pad2)
+            stringify!(_wide_data)
         )
     );
     assert_eq!(
-        unsafe { &(*(::std::ptr::null::<_IO_FILE>())).__pad3 as *const _ as usize },
+        unsafe { &(*(::std::ptr::null::<_IO_FILE>()))._freeres_list as *const _ as usize },
         168usize,
         concat!(
             "Offset of field: ",
             stringify!(_IO_FILE),
             "::",
-            stringify!(__pad3)
+            stringify!(_freeres_list)
         )
     );
     assert_eq!(
-        unsafe { &(*(::std::ptr::null::<_IO_FILE>())).__pad4 as *const _ as usize },
+        unsafe { &(*(::std::ptr::null::<_IO_FILE>()))._freeres_buf as *const _ as usize },
         176usize,
         concat!(
             "Offset of field: ",
             stringify!(_IO_FILE),
             "::",
-            stringify!(__pad4)
+            stringify!(_freeres_buf)
         )
     );
     assert_eq!(
