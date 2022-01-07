@@ -1,4 +1,4 @@
-use crate::{Reason, TxType};
+use crate::{Reason, RecordType, TxType};
 
 use crate::{
     vsl::models::{CacheHandling, LogRecord, LogRequest, LogResponse},
@@ -137,7 +137,7 @@ impl LogTransform {
                 CursorResult::Error(e) => bail!("read_next_record returned {}", e),
                 CursorResult::Match(td) => {
                     let tag = td.tag.to_str().unwrap();
-                    let data = td.data.to_str().unwrap();
+                    let data = &td.data.to_string_lossy();
 
                     match tag {
                         "HttpGarbage" => {
@@ -172,12 +172,12 @@ impl LogTransform {
                             let timing_name = data.event.clone();
                             timings.insert(timing_name, data);
                         }
-                        "ReqMethod" | "BereqMethod" => req_method = data.into(),
-                        "ReqProtocol" | "BereqProtocol" => req_protocol = data.into(),
-                        "ReqURL" | "BereqURL" => req_url = data.into(),
+                        "ReqMethod" | "BereqMethod" => req_method = data.to_string(),
+                        "ReqProtocol" | "BereqProtocol" => req_protocol = data.to_string(),
+                        "ReqURL" | "BereqURL" => req_url = data.to_string(),
                         "ReqUnset" => {
                             if self.track_headers {
-                                req_unset.push(data.into())
+                                req_unset.push(data.to_string())
                             }
                         }
                         "ReqStart" => {
@@ -212,7 +212,7 @@ impl LogTransform {
                         "TTL" => ttl = Some(parsers::ttl(tag, &data)?.1),
                         "RespUnset" => {
                             if self.track_headers {
-                                resp_unset.push(data.into());
+                                resp_unset.push(data.to_string());
                             }
                         }
                         "RespHeader" | "BerespHeader" => {
