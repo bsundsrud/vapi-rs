@@ -1,4 +1,5 @@
 use crate::config::OutputConfig;
+use crate::metrics::{RECONNECT_COUNTER, SENT_COUNTER, SENT_HISTO};
 use anyhow::{anyhow, Result};
 use crossbeam::select;
 use crossbeam_channel::Receiver;
@@ -8,7 +9,6 @@ use std::time::Duration;
 use std::{net::SocketAddr, net::ToSocketAddrs};
 use tracing::{error, info};
 use vapi::vsl::LogRecord;
-
 fn send_to_stdout(rx: Receiver<LogRecord>) -> Result<()> {
     loop {
         select! {
@@ -20,9 +20,11 @@ fn send_to_stdout(rx: Receiver<LogRecord>) -> Result<()> {
                         continue;
                     },
                 };
+                SENT_COUNTER.inc();
+                let timer = SENT_HISTO.start_timer();
                 println!("-----------------------------------------");
                 println!("{}", serde_json::to_string_pretty(&log).unwrap());
-
+                timer.observe_duration();
             }
         }
     }
@@ -77,6 +79,7 @@ fn send_to_tcp(
                                     continue;
                                 },
                             };
+                            SENT_COUNTER.inc();
                             let mut json: String = match serde_json::to_string(&log) {
                                 Ok(j) => j,
                                 Err(e) => {
@@ -85,9 +88,13 @@ fn send_to_tcp(
                                 },
                             };
                             json.push('\n');
-                            if let Err(e) = stream.write(json.as_bytes()) {
+                            let timer = SENT_HISTO.start_timer();
+                            let res =  stream.write(json.as_bytes());
+                            timer.observe_duration();
+                            if let Err(e) = res {
                                 error!("Error writing to TCP socket: {}", e);
                                 stream = loop_until_connected(&addr, timeout, retry_interval);
+                                RECONNECT_COUNTER.inc();
                             }
                         }
                     }
@@ -108,7 +115,9 @@ fn null_consumer(rx: Receiver<LogRecord>) -> Result<()> {
         select! {
             recv(rx) -> res => {
                 match res {
-                    Ok(_) => {}
+                    Ok(_) => {
+                        SENT_COUNTER.inc();
+                    }
                     Err(e) => { error!("Error in transform: {}", e)}
                 }
             }

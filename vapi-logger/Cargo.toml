@@ -15,7 +15,10 @@ tracing-subscriber = { version = "0.2.20", features = [ "tracing-log" ] }
 serde = { version = "1.0.127", features = [ "derive" ] }
 serde_json = "1.0.66"
 nom = "6.2.1"
-anyhow = "1.0.43"
+anyhow = "1.0.52"
 lexical-core = "0.7.6"
 structopt = { version = "0.3.23", default-features = false }
 toml = "0.5.8"
+prometheus = "0.13.0"
+lazy_static = "1.4.0"
+tiny_http = "0.9.0"

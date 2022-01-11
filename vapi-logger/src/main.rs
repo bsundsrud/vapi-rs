@@ -7,6 +7,7 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufReader;
 use std::path::Path;
+use std::sync::Arc;
 use structopt::StructOpt;
 use tracing::{error, info};
 use vapi::prelude::*;
@@ -16,6 +17,7 @@ use std::{path::PathBuf, time::Duration};
 use tracing_subscriber::EnvFilter;
 
 mod config;
+pub(crate) mod metrics;
 mod output;
 mod transform;
 
@@ -40,7 +42,10 @@ fn main() -> Result<()> {
         .unwrap();
     let opt = Opt::from_args();
     let config = load_config(&opt.config)?;
-    thread::scope(|s| {
+    let m = metrics::Metrics::new("vapi_logger");
+    let metrics_config = config.metrics;
+
+    thread::scope(move |s| {
         let (_tx, rx) = unbounded::<()>();
         let (tx_reacquired, rx_reacquired) = unbounded::<()>();
         let overrun_watcher_stop_signal = rx.clone();
@@ -51,7 +56,10 @@ fn main() -> Result<()> {
                     break;
                 }
                 recv(rx_reacquired) -> res => match res {
-                    Ok(_) => error!("Log overrun!"),
+                    Ok(_) => {
+                        metrics::OVERRUN_COUNTER.inc();
+                        error!("Log overrun!");
+                    },
                     Err(e) => {
                         error!("Watchdog channel error: {}", e);
                         break;
@@ -115,11 +123,39 @@ fn main() -> Result<()> {
             }
             res
         });
-        let tcp_handle = s.spawn(|_| {});
+        if metrics_config.enabled {
+            let metrics_thread = s.spawn(move |s| {
+                let server = Arc::new(
+                    tiny_http::Server::http((metrics_config.address.as_str(), metrics_config.port))
+                        .unwrap(),
+                );
+                info!(
+                    "Starting {} thread(s) for metrics requests, URL: {}:{}",
+                    metrics_config.worker_threads, &metrics_config.address, metrics_config.port
+                );
+                for _ in 0..metrics_config.worker_threads {
+                    let server = server.clone();
+                    let m = m.clone();
+                    s.spawn(move |_| loop {
+                        let rq = server.recv().unwrap();
+                        if *rq.method() == tiny_http::Method::Get && rq.url() == "/metrics" {
+                            let text = m.get_metrics_text();
+                            let response =
+                                tiny_http::Response::from_string(text).with_status_code(200);
+                            let _ = rq.respond(response);
+                        } else {
+                            let response =
+                                tiny_http::Response::from_string("Not Found").with_status_code(404);
+                            let _ = rq.respond(response);
+                        }
+                    });
+                }
+            });
+            let _ = metrics_thread.join();
+        }
         let _ = handle.join();
         let _ = overrun_watcher.join();
         let _ = log_consumer.join();
-        let _ = tcp_handle.join();
     })
     .unwrap();
     Ok(())

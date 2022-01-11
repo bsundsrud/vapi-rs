@@ -1,4 +1,4 @@
-use crate::{Reason, RecordType, TxType};
+use crate::{Reason, TxType};
 
 use crate::{
     vsl::models::{CacheHandling, LogRecord, LogRequest, LogResponse},

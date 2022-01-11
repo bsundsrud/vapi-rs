@@ -20,6 +20,18 @@ fn default_tcp_sender_threads() -> u64 {
     2
 }
 
+fn default_metrics_address() -> String {
+    "127.0.0.1".to_string()
+}
+
+fn default_metrics_port() -> u16 {
+    9150
+}
+
+fn default_metrics_threads() -> usize {
+    1
+}
+
 #[derive(Debug, Deserialize, Default)]
 pub struct InputConfig {
     #[serde(default = "default_shm_connect_timeout")]
@@ -47,6 +59,28 @@ pub enum OutputConfig {
 impl Default for OutputConfig {
     fn default() -> Self {
         Self::Stdout
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct MetricsConfig {
+    pub enabled: bool,
+    #[serde(default = "default_metrics_address")]
+    pub address: String,
+    #[serde(default = "default_metrics_port")]
+    pub port: u16,
+    #[serde(default = "default_metrics_threads")]
+    pub worker_threads: usize,
+}
+
+impl Default for MetricsConfig {
+    fn default() -> Self {
+        MetricsConfig {
+            enabled: false,
+            address: default_metrics_address(),
+            port: default_metrics_port(),
+            worker_threads: default_metrics_threads(),
+        }
     }
 }
 
@@ -147,6 +181,8 @@ pub struct Config {
     pub output: OutputConfig,
     #[serde(default)]
     pub logging: LoggingConfig,
+    #[serde(default)]
+    pub metrics: MetricsConfig,
 }
 
 pub fn transform_from_config(config: &LoggingConfig) -> LogTransform {
