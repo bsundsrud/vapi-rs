@@ -36,6 +36,7 @@ impl Metrics {
         Metrics { registry }
     }
 
+    #[allow(unused)]
     pub fn print_metrics(&self) {
         println!("{}", self.get_metrics_text());
     }

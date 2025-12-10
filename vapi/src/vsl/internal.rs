@@ -1,6 +1,7 @@
 use super::transform::LogTransform;
 use super::{LogGrouping, LogRecord, Reason, RecordType, TxType};
 use crate::error::{Result, VarnishError};
+use crate::vsl::VarnishLogBuilder;
 use crate::vsm::{vsm_status, OpenVSM};
 use crossbeam_channel::{Receiver, Sender, TryRecvError};
 use std::ffi::{CStr, CString};
@@ -59,7 +60,7 @@ impl VslQ {
         let vslq =
             unsafe { vapi_sys::VSLQ_New(vsl.vsl, ptr::null_mut(), grouping.as_raw(), ptr::null()) };
         if vslq.is_null() {
-            return Err(VarnishError::from_vsl_error(&vsl));
+            return Err(VarnishError::from_vsl_error(vsl));
         }
         Ok(VslQ { vslq })
     }
@@ -70,7 +71,7 @@ impl VslQ {
             vapi_sys::VSLQ_New(vsl.vsl, ptr::null_mut(), grouping.as_raw(), query.as_ptr())
         };
         if vslq.is_null() {
-            return Err(VarnishError::from_vsl_error(&vsl));
+            return Err(VarnishError::from_vsl_error(vsl));
         }
         Ok(VslQ { vslq })
     }
@@ -133,6 +134,7 @@ pub(crate) enum CursorResult<'rec> {
     Match(TagData<'rec>),
 }
 
+#[allow(unused)]
 pub(crate) struct TagData<'rec> {
     pub vxid: u32,
     pub tag: &'rec CStr,
@@ -140,6 +142,7 @@ pub(crate) struct TagData<'rec> {
     pub ty: RecordType,
 }
 
+#[allow(unused)]
 impl VslTransaction {
     unsafe fn new(
         tx: *mut vapi_sys::VSL_transaction,
@@ -177,7 +180,7 @@ impl VslTransaction {
         matches == 1
     }
 
-    fn read_tag_data(&self) -> TagData {
+    fn read_tag_data(&self) -> TagData<'_> {
         let rec_ptr = unsafe {
             assert!(!self.tx.is_null());
             assert!(!(*self.tx).c.is_null());
@@ -200,7 +203,7 @@ impl VslTransaction {
         };
         let data: &[u32] = unsafe { std::slice::from_raw_parts(rec_ptr, data_length as usize + 2) };
         let data = &data[2..];
-        let data: &[u8] = as_u8_slice(&data, data_length);
+        let data: &[u8] = as_u8_slice(data, data_length);
         let data = unsafe { CStr::from_bytes_with_nul_unchecked(data) };
 
         TagData {
@@ -211,7 +214,7 @@ impl VslTransaction {
         }
     }
 
-    pub(crate) fn read_next_record(&mut self) -> CursorResult {
+    pub(crate) fn read_next_record(&mut self) -> CursorResult<'_> {
         match self.advance_next() {
             Ok(false) => return CursorResult::NoData,
             Err(status) => return CursorResult::Error(status),
@@ -224,15 +227,15 @@ impl VslTransaction {
         }
     }
 
-    pub(crate) fn level(&self) -> u32 {
+    pub(crate) fn level(&self) -> i32 {
         unsafe { (*self.tx).level }
     }
 
-    pub(crate) fn vxid(&self) -> u32 {
+    pub(crate) fn vxid(&self) -> i64 {
         unsafe { (*self.tx).vxid }
     }
 
-    pub(crate) fn parent_vxid(&self) -> u32 {
+    pub(crate) fn parent_vxid(&self) -> i64 {
         unsafe { (*self.tx).vxid_parent }
     }
 
@@ -251,25 +254,19 @@ fn as_u8_slice(v: &[u32], len: u32) -> &[u8] {
 
 pub(crate) fn query_loop(
     vsm: &OpenVSM,
-    grouping: LogGrouping,
-    query: Option<String>,
-    cursor_opts: u32,
-    reacquire_on_overrun: bool,
-    reacquire_signal: Option<Sender<()>>,
-    log_sender: Sender<LogRecord>,
-    transform: LogTransform,
+    options: VarnishLogBuilder,
     stop: Option<Receiver<()>>,
 ) -> Result<()> {
     let mut vsl = Vsl::new()?;
-    let mut vslq = if let Some(q) = query {
-        VslQ::new_with_query(&vsl, grouping, q)?
+    let mut vslq = if let Some(q) = options.query {
+        VslQ::new_with_query(&vsl, options.grouping, q)?
     } else {
-        VslQ::new(&vsl, grouping)?
+        VslQ::new(&vsl, options.grouping)?
     };
     let mut cursor = None;
     let callback_data = CallbackData {
-        log_sender,
-        transform,
+        log_sender: options.log_sender,
+        transform: options.transform,
     };
     loop {
         if vsm.status() & vsm_status::VSM_WRK_RESTARTED != 0 && cursor.is_some() {
@@ -277,7 +274,7 @@ pub(crate) fn query_loop(
             cursor = None;
         }
         if cursor.is_none() {
-            match VslCursor::new(&mut vsl, vsm, cursor_opts) {
+            match VslCursor::new(&mut vsl, vsm, options.cursor_opts.into()) {
                 Ok(mut c) => {
                     vslq.set_cursor(&mut c);
                     cursor = Some(c);
@@ -325,10 +322,10 @@ pub(crate) fn query_loop(
             vslq.clear_cursor();
             cursor = None
         } else if res == vapi_sys::vsl_status_vsl_e_overrun {
-            if reacquire_on_overrun {
+            if options.reacquire {
                 vslq.clear_cursor();
                 cursor = None;
-                if let Some(tx) = reacquire_signal.as_ref() {
+                if let Some(tx) = options.reacquire_signal.as_ref() {
                     tx.send(()).map_err(|_| VarnishError::LogOverrun)?;
                 }
             } else {

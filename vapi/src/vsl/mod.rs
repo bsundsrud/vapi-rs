@@ -57,7 +57,7 @@ const TAIL: u32 = 1;
 const BATCH: u32 = 1 << 1;
 const TAILSTOP: u32 = 1 << 2;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Copy, Clone)]
 pub struct CursorOpts(u32);
 
 impl CursorOpts {
@@ -103,15 +103,15 @@ impl From<CursorOpts> for u32 {
 }
 
 pub(crate) struct VarnishLogBuilder {
-    grouping: LogGrouping,
-    query: Option<String>,
-    cursor_opts: CursorOpts,
-    reacquire: bool,
-    reacquire_signal: Option<Sender<()>>,
-    type_filter: Vec<TxType>,
-    reason_filter: Vec<Reason>,
-    log_sender: Sender<LogRecord>,
-    transform: LogTransform,
+    pub(crate) grouping: LogGrouping,
+    pub(crate) query: Option<String>,
+    pub(crate) cursor_opts: CursorOpts,
+    pub(crate) reacquire: bool,
+    pub(crate) reacquire_signal: Option<Sender<()>>,
+    pub(crate) type_filter: Vec<TxType>,
+    pub(crate) reason_filter: Vec<Reason>,
+    pub(crate) log_sender: Sender<LogRecord>,
+    pub(crate) transform: LogTransform,
 }
 
 impl VarnishLogBuilder {
@@ -165,17 +165,7 @@ impl VarnishLogBuilder {
     }
 
     pub fn execute(self, vsm: &OpenVSM, stop_channel: Option<Receiver<()>>) -> Result<()> {
-        query_loop(
-            vsm,
-            self.grouping,
-            self.query,
-            self.cursor_opts.into(),
-            self.reacquire,
-            self.reacquire_signal,
-            self.log_sender,
-            self.transform,
-            stop_channel,
-        )
+        query_loop(vsm, self, stop_channel)
     }
 }
 

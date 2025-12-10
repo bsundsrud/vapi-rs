@@ -14,7 +14,7 @@ use vapi::prelude::*;
 use vapi::vsl::LogRecord;
 
 use std::{path::PathBuf, time::Duration};
-use tracing_subscriber::EnvFilter;
+use tracing_subscriber::filter::EnvFilter;
 
 mod config;
 pub(crate) mod metrics;
@@ -28,7 +28,7 @@ pub struct Opt {
 }
 
 fn load_config(path: &Path) -> Result<Config> {
-    let config_file = File::open(&path)?;
+    let config_file = File::open(path)?;
     let mut reader = BufReader::new(config_file);
     let mut contents = String::new();
     reader.read_to_string(&mut contents)?;
@@ -117,9 +117,8 @@ fn main() -> Result<()> {
                 .reason_filter(reason_filter)
                 .reacquire_and_signal_after_overrun(tx_reacquired)
                 .start(log_tx, Some(rx), log_transform);
-            match res {
-                Err(ref e) => error!("Varnish logging failed: {}", e),
-                _ => {}
+            if let Err(ref e) = res {
+                error!("Varnish logging failed: {}", e);
             }
             res
         });

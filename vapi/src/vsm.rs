@@ -1,7 +1,6 @@
 use crate::error::{Result, VarnishError};
 use std::ffi::CString;
 use std::time::Duration;
-use vapi_sys;
 
 #[derive(Debug)]
 pub(crate) struct SharedMem {
@@ -59,7 +58,7 @@ impl SharedMem {
         let arg = CString::new(String::from("n")).unwrap();
         unsafe {
             if vapi_sys::VSM_Arg(self.vsm, *arg.as_ptr(), val.as_ptr()) != 1 {
-                return Err(VarnishError::from_vsm_error(&self));
+                return Err(VarnishError::from_vsm_error(self));
             }
         }
         Ok(())
@@ -74,7 +73,7 @@ impl SharedMem {
         let arg = CString::new(String::from("t")).unwrap();
         unsafe {
             if vapi_sys::VSM_Arg(self.vsm, *arg.as_ptr(), val.as_ptr()) != 1 {
-                return Err(VarnishError::from_vsm_error(&self));
+                return Err(VarnishError::from_vsm_error(self));
             }
         }
 

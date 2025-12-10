@@ -1,6 +1,7 @@
 use serde::Serialize;
 use serde_json::Value;
 
+#[allow(unused)]
 #[derive(Debug, Serialize)]
 pub struct LogOutput {
     pub vxid: u32,

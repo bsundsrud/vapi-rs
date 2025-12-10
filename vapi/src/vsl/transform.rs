@@ -12,10 +12,10 @@ use std::fmt::Debug;
 use super::internal::{CursorResult, VslTransaction};
 use super::IpSource;
 
-fn try_parse_parent_vxid(s: &str) -> Result<u32> {
+fn try_parse_parent_vxid(s: &str) -> Result<i64> {
     let mut parts = s.split_whitespace();
     if let (Some(_), Some(parent_vxid)) = (parts.next(), parts.next()) {
-        Ok(parent_vxid.parse::<u32>()?)
+        Ok(parent_vxid.parse::<i64>()?)
     } else {
         bail!("Couldn't parse vxid out of {}", s)
     }
@@ -30,6 +30,12 @@ pub struct LogTransform {
     ip_source: IpSource,
     type_filter: Vec<TxType>,
     reason_filter: Vec<Reason>,
+}
+
+impl Default for LogTransform {
+    fn default() -> Self {
+        LogTransform::new()
+    }
 }
 
 impl LogTransform {
@@ -51,18 +57,12 @@ impl LogTransform {
     }
 
     pub fn req_headers<T: AsRef<str>>(mut self, headers: &[T]) -> Self {
-        self.req_header_list = headers
-            .into_iter()
-            .map(|s| s.as_ref().to_lowercase())
-            .collect();
+        self.req_header_list = headers.iter().map(|s| s.as_ref().to_lowercase()).collect();
         self
     }
 
     pub fn resp_headers<T: AsRef<str>>(mut self, headers: &[T]) -> Self {
-        self.resp_header_list = headers
-            .into_iter()
-            .map(|s| s.as_ref().to_lowercase())
-            .collect();
+        self.resp_header_list = headers.iter().map(|s| s.as_ref().to_lowercase()).collect();
         self
     }
 
@@ -144,7 +144,7 @@ impl LogTransform {
                             return Ok(None);
                         }
                         "Begin" => {
-                            parent_vxid = try_parse_parent_vxid(&data)?;
+                            parent_vxid = try_parse_parent_vxid(data)?;
                         }
                         "End" => {}
                         "VCL_call" => {
@@ -156,7 +156,7 @@ impl LogTransform {
                                 "backend_error" => Some(CacheHandling::Error),
                                 _ => handling,
                             };
-                            call_chain.push(format!("Call {}", &data));
+                            call_chain.push(format!("Call {}", data));
                         }
                         "VCL_return" => {
                             if data.to_lowercase() == "pipe" {
@@ -165,10 +165,10 @@ impl LogTransform {
                             if data.to_lowercase() == "restart" {
                                 return Ok(None);
                             }
-                            call_chain.push(format!("Return {}", &data));
+                            call_chain.push(format!("Return {}", data));
                         }
                         "Timestamp" => {
-                            let (_tag, data) = parsers::timestamp(tag, &data)?;
+                            let (_tag, data) = parsers::timestamp(tag, data)?;
                             let timing_name = data.event.clone();
                             timings.insert(timing_name, data);
                         }
@@ -181,11 +181,11 @@ impl LogTransform {
                             }
                         }
                         "ReqStart" => {
-                            let rs = parsers::reqstart(&data)?;
+                            let rs = parsers::reqstart(data)?;
                             remoteip = Some(rs.address);
                         }
                         "ReqHeader" | "BereqHeader" => {
-                            let (k, v) = parsers::header(&data)?;
+                            let (k, v) = parsers::header(data)?;
                             let lower_header = k.to_lowercase();
                             if let IpSource::Header { name } = &self.ip_source {
                                 if lower_header == *name {
@@ -197,26 +197,26 @@ impl LogTransform {
                             }
                         }
                         "ReqAcct" | "BereqAcct" => {
-                            let (_tag, acct) = parsers::req_accounting(tag, &data)?;
+                            let (_tag, acct) = parsers::req_accounting(tag, data)?;
                             accounting = Some(acct);
                         }
                         "Link" => {
-                            link = Some(parsers::link(tag, &data)?.1);
+                            link = Some(parsers::link(tag, data)?.1);
                         }
                         "RespStatus" | "BerespStatus" => {
-                            resp_status = parsers::status(&data)?;
+                            resp_status = parsers::status(data)?;
                         }
                         "RespProtocol" | "BerespProtocol" => {
                             resp_protocol = data.to_string();
                         }
-                        "TTL" => ttl = Some(parsers::ttl(tag, &data)?.1),
+                        "TTL" => ttl = Some(parsers::ttl(tag, data)?.1),
                         "RespUnset" => {
                             if self.track_headers {
                                 resp_unset.push(data.to_string());
                             }
                         }
                         "RespHeader" | "BerespHeader" => {
-                            let (k, v) = parsers::header(&data)?;
+                            let (k, v) = parsers::header(data)?;
                             let lower_header = k.to_lowercase();
                             if lower_header == "content-length" {
                                 length = parsers::parse(&v)?;
@@ -226,7 +226,7 @@ impl LogTransform {
                             }
                         }
                         "Length" => {
-                            length = parsers::parse(&data)?;
+                            length = parsers::parse(data)?;
                         }
                         _ => {}
                     }

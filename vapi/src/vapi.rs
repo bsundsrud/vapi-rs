@@ -85,7 +85,7 @@ impl<'vsm> LoggingBuilder<'vsm> {
 
     pub fn query<S: Into<String>>(mut self, query: S) -> Self {
         let q = query.into();
-        if q != "" {
+        if !q.is_empty() {
             self.query = Some(q);
         }
         self

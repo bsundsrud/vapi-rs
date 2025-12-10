@@ -39,9 +39,10 @@ pub struct InputConfig {
     pub path: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Default)]
 #[serde(tag = "destination", rename_all = "snake_case")]
 pub enum OutputConfig {
+    #[default]
     Stdout,
     Tcp {
         host: String,
@@ -54,12 +55,6 @@ pub enum OutputConfig {
         sender_threads: u64,
     },
     Null,
-}
-
-impl Default for OutputConfig {
-    fn default() -> Self {
-        Self::Stdout
-    }
 }
 
 #[derive(Debug, Deserialize)]

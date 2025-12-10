@@ -2,12 +2,12 @@ use std::str::FromStr;
 
 use anyhow::{anyhow, Result};
 use nom::{
-    bytes::complete::{tag, take_until, take_while},
+    bytes::complete::{tag, take_till, take_until, take_while},
     character::complete::{alphanumeric1, digit0, digit1, space0},
     combinator::{all_consuming, complete, map, map_res, opt},
     number::complete::double,
     sequence::{delimited, terminated},
-    IResult,
+    IResult, Parser,
 };
 use serde::{Deserialize, Serialize};
 
@@ -28,13 +28,13 @@ pub struct ReqStart {
 }
 
 fn not_whitespace(input: &str) -> IResult<&str, &str> {
-    let (rest, val) = terminated(take_while(|c: char| !c.is_whitespace()), space0)(input)?;
+    let (rest, val) = terminated(take_till(char::is_whitespace), space0).parse(input)?;
     Ok((rest, val))
 }
 
 fn parse_reqstart(input: &str) -> IResult<&str, ReqStart> {
     let (rest, address) = not_whitespace(input)?;
-    let (rest, port) = map_res(not_whitespace, |p| p.parse())(rest)?;
+    let (rest, port) = map_res(not_whitespace, |p| p.parse()).parse(rest)?;
     let (rest, listener) = not_whitespace(rest)?;
     Ok((
         rest,
@@ -47,7 +47,8 @@ fn parse_reqstart(input: &str) -> IResult<&str, ReqStart> {
 }
 
 pub fn reqstart(input: &str) -> Result<ReqStart> {
-    let (_, rs) = complete(all_consuming(parse_reqstart))(input)
+    let (_, rs) = complete(all_consuming(parse_reqstart))
+        .parse(input)
         .map_err(|e| anyhow!("Invalid ReqStart: {}", e))?;
     Ok(rs)
 }
@@ -71,12 +72,12 @@ pub fn remote_ip(input: &str) -> Result<String> {
     Ok(ip.to_string())
 }
 
-fn parse_timestamp<'a>(input: &'a str) -> IResult<&'a str, Timestamp> {
+fn parse_timestamp(input: &str) -> IResult<&str, Timestamp> {
     let (rest, event) = alphanumeric1(input)?;
     let (rest, _) = tag(":")(rest)?;
-    let (rest, ts) = delimited(space0, double, space0)(rest)?;
-    let (rest, since_start) = delimited(space0, double, space0)(rest)?;
-    let (rest, since_last_timestamp) = delimited(space0, double, space0)(rest)?;
+    let (rest, ts) = delimited(space0, double, space0).parse(rest)?;
+    let (rest, since_start) = delimited(space0, double, space0).parse(rest)?;
+    let (rest, since_last_timestamp) = delimited(space0, double, space0).parse(rest)?;
     Ok((
         rest,
         Timestamp {
@@ -89,7 +90,8 @@ fn parse_timestamp<'a>(input: &'a str) -> IResult<&'a str, Timestamp> {
 }
 
 pub fn timestamp<'a>(tag: &'a str, value: &str) -> Result<(&'a str, Timestamp)> {
-    let (_, ts) = complete(all_consuming(parse_timestamp))(value)
+    let (_, ts) = complete(all_consuming(parse_timestamp))
+        .parse(value)
         .map_err(|e| anyhow!("Invalid timestamp value: {}", e))?;
     Ok((tag, ts))
 }
@@ -114,7 +116,8 @@ pub fn status(value: &str) -> Result<u16> {
 }
 
 pub fn header(value: &str) -> Result<(String, String)> {
-    let (_, header) = complete(all_consuming(parse_header))(value)
+    let (_, header) = complete(all_consuming(parse_header))
+        .parse(value)
         .map_err(|e| anyhow!("Invalid header value: {}", e))?;
     let (key, value) = header;
     Ok((key, value))
@@ -123,7 +126,8 @@ pub fn header(value: &str) -> Result<(String, String)> {
 pub fn unsigned_delimited(input: &str) -> IResult<&str, u64> {
     map_res(delimited(space0, digit1, space0), |s: &str| {
         s.parse::<u64>()
-    })(input)
+    })
+    .parse(input)
 }
 
 #[derive(PartialEq, Debug, Serialize, Deserialize)]
@@ -157,7 +161,8 @@ fn parse_reqacct(input: &str) -> IResult<&str, RequestAccounting> {
 }
 
 pub fn req_accounting<'a>(tag: &'a str, value: &str) -> Result<(&'a str, RequestAccounting)> {
-    let (_, accounting) = complete(all_consuming(parse_reqacct))(value)
+    let (_, accounting) = complete(all_consuming(parse_reqacct))
+        .parse(value)
         .map_err(|e| anyhow!("Invalid request accounting value: {}", e))?;
     Ok((tag, accounting))
 }
@@ -171,11 +176,12 @@ pub struct VarnishLink {
 }
 
 fn parse_link(input: &str) -> IResult<&str, VarnishLink> {
-    let (rest, ty) = delimited(space0, alphanumeric1, space0)(input)?;
+    let (rest, ty) = delimited(space0, alphanumeric1, space0).parse(input)?;
     let (rest, vxid) = map_res(delimited(space0, digit1, space0), |s: &str| {
         s.parse::<u32>()
-    })(rest)?;
-    let (rest, reason) = delimited(space0, alphanumeric1, space0)(rest)?;
+    })
+    .parse(rest)?;
+    let (rest, reason) = delimited(space0, alphanumeric1, space0).parse(rest)?;
 
     Ok((
         rest,
@@ -188,7 +194,8 @@ fn parse_link(input: &str) -> IResult<&str, VarnishLink> {
 }
 
 pub fn link<'a>(tag: &'a str, value: &str) -> Result<(&'a str, VarnishLink)> {
-    let (_, l) = complete(all_consuming(parse_link))(value)
+    let (_, l) = complete(all_consuming(parse_link))
+        .parse(value)
         .map_err(|e| anyhow!("Invalid link value: {}", e))?;
     Ok((tag, l))
 }
@@ -208,33 +215,33 @@ pub struct VarnishTtl {
 }
 
 fn signed_number(input: &str) -> IResult<&str, i64> {
-    let (rest, negative) = opt(nom::character::complete::char('-'))(input)?;
+    let (rest, negative) = opt(nom::character::complete::char('-')).parse(input)?;
     if negative.is_none() {
-        map_res(digit0, |s: &str| s.parse::<i64>())(rest)
+        map_res(digit0, |s: &str| s.parse::<i64>()).parse(rest)
     } else {
-        let (rest, number) = map_res(digit1, |s: &str| s.parse::<i64>())(rest)?;
+        let (rest, number) = map_res(digit1, |s: &str| s.parse::<i64>()).parse(rest)?;
         Ok((rest, -number))
     }
 }
 
 fn signed_delimited(input: &str) -> IResult<&str, i64> {
-    delimited(space0, signed_number, space0)(input)
+    delimited(space0, signed_number, space0).parse(input)
 }
 
 fn parse_ttl(input: &str) -> IResult<&str, VarnishTtl> {
     let mut is_cacheable = map(delimited(space0, alphanumeric1, space0), |s: &str| {
         s == "cacheable"
     });
-    let (rest, source) = delimited(space0, alphanumeric1, space0)(input)?;
-    let (rest, ttl) = signed_delimited(&rest)?;
-    let (rest, grace) = signed_delimited(&rest)?;
-    let (rest, keep) = signed_delimited(&rest)?;
-    let (rest, reference) = signed_delimited(&rest)?;
-    let (rest, age) = opt(signed_delimited)(&rest)?;
-    let (rest, date) = opt(signed_delimited)(&rest)?;
-    let (rest, expires) = opt(signed_delimited)(&rest)?;
-    let (rest, max_age) = opt(signed_delimited)(&rest)?;
-    let (rest, cacheable) = is_cacheable(&rest)?;
+    let (rest, source) = delimited(space0, alphanumeric1, space0).parse(input)?;
+    let (rest, ttl) = signed_delimited(rest)?;
+    let (rest, grace) = signed_delimited(rest)?;
+    let (rest, keep) = signed_delimited(rest)?;
+    let (rest, reference) = signed_delimited(rest)?;
+    let (rest, age) = opt(signed_delimited).parse(rest)?;
+    let (rest, date) = opt(signed_delimited).parse(rest)?;
+    let (rest, expires) = opt(signed_delimited).parse(rest)?;
+    let (rest, max_age) = opt(signed_delimited).parse(rest)?;
+    let (rest, cacheable) = is_cacheable.parse(rest)?;
     Ok((
         rest,
         VarnishTtl {
@@ -253,7 +260,8 @@ fn parse_ttl(input: &str) -> IResult<&str, VarnishTtl> {
 }
 
 pub fn ttl<'a>(tag: &'a str, value: &str) -> Result<(&'a str, VarnishTtl)> {
-    let (_, t) = complete(all_consuming(parse_ttl))(value)
+    let (_, t) = complete(all_consuming(parse_ttl))
+        .parse(value)
         .map_err(|e| anyhow!("Invalid ttl value: {}", e))?;
     Ok((tag, t))
 }

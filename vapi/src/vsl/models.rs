@@ -63,7 +63,7 @@ impl From<u32> for Reason {
             6 => Fetch,
             7 => BgFetch,
             8 => Pipe,
-            v @ _ => NotHandled(v),
+            v => NotHandled(v),
         }
     }
 }
@@ -102,9 +102,9 @@ pub struct LogResponse {
 
 #[derive(Debug, Serialize)]
 pub struct LogRecord {
-    pub level: u32,
-    pub vxid: u32,
-    pub parent_vxid: u32,
+    pub level: i32,
+    pub vxid: i64,
+    pub parent_vxid: i64,
     pub tx_type: TxType,
     pub reason: Reason,
     pub call_chain: Vec<String>,

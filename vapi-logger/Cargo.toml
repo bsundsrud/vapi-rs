@@ -8,17 +8,17 @@ edition = "2021"
 
 [dependencies]
 vapi = { path = "../vapi" }
-crossbeam = "0.8.1"
-crossbeam-channel = "0.5.1"
-tracing = "0.1.26"
-tracing-subscriber = { version = "0.2.20", features = [ "tracing-log" ] }
-serde = { version = "1.0.127", features = [ "derive" ] }
-serde_json = "1.0.66"
-nom = "6.2.1"
-anyhow = "1.0.52"
-lexical-core = "0.7.6"
-structopt = { version = "0.3.23", default-features = false }
-toml = "0.5.8"
-prometheus = "0.13.0"
-lazy_static = "1.4.0"
-tiny_http = "0.9.0"
+crossbeam = "0.8.4"
+crossbeam-channel = "0.5.15"
+tracing = "0.1.43"
+tracing-subscriber = { version = "0.3.22", features = [ "tracing-log", "env-filter"] }
+serde = { version = "1.0.228", features = [ "derive" ] }
+serde_json = "1.0.145"
+nom = "8.0.0"
+anyhow = "1.0.100"
+lexical-core = "1.0.6"
+structopt = { version = "0.3.26", default-features = false }
+toml = "0.9.8"
+prometheus = "0.14.0"
+lazy_static = "1.5.0"
+tiny_http = "0.12.0"
