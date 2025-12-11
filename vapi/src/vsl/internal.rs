@@ -231,11 +231,11 @@ impl VslTransaction {
         unsafe { (*self.tx).level }
     }
 
-    pub(crate) fn vxid(&self) -> i64 {
+    pub(crate) fn vxid(&self) -> u32 {
         unsafe { (*self.tx).vxid }
     }
 
-    pub(crate) fn parent_vxid(&self) -> i64 {
+    pub(crate) fn parent_vxid(&self) -> u32 {
         unsafe { (*self.tx).vxid_parent }
     }
 

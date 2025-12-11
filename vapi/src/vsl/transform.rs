@@ -12,10 +12,10 @@ use std::fmt::Debug;
 use super::internal::{CursorResult, VslTransaction};
 use super::IpSource;
 
-fn try_parse_parent_vxid(s: &str) -> Result<i64> {
+fn try_parse_parent_vxid(s: &str) -> Result<u32> {
     let mut parts = s.split_whitespace();
     if let (Some(_), Some(parent_vxid)) = (parts.next(), parts.next()) {
-        Ok(parent_vxid.parse::<i64>()?)
+        Ok(parent_vxid.parse::<u32>()?)
     } else {
         bail!("Couldn't parse vxid out of {}", s)
     }
