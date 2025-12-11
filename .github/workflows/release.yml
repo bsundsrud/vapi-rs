@@ -19,7 +19,7 @@ jobs:
     - name: Repo install
       run: echo "deb https://packagecloud.io/varnishcache/varnish60lts/ubuntu/ noble main" | sudo tee -a /etc/apt/sources.list.d/varnish.list
     - name: Varnish Install
-      run: sudo apt-get update && sudo apt-get install varnish-dev=6.0.16-1~noble
+      run: sudo apt-get update && sudo apt-get install varnish=6.0.16-1~noble varnish-dev=6.0.16-1~noble
     - name: Build
       run: cargo build --verbose --release
     - name: Run tests
