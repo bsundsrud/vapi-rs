@@ -227,7 +227,7 @@ impl VslTransaction {
         }
     }
 
-    pub(crate) fn level(&self) -> i32 {
+    pub(crate) fn level(&self) -> u32 {
         unsafe { (*self.tx).level }
     }
 

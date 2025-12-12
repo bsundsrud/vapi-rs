@@ -16,9 +16,9 @@ Pin: release o=packagecloud.io/varnishcache/*
 Pin-Priority: 1000
 EOF
 EOR
-RUN apt-get update && apt-get install -y libvarnishapi-dev llvm-dev libclang-dev clang pkg-config git
+RUN apt-get update && apt-get install -y varnish varnish-dev llvm-dev libclang-dev clang pkg-config git
 
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -o rustup-init.sh && sh rustup-init.sh -y --default-toolchain stable --profile minimal --no-modify-path
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -o rustup-init.sh && sh rustup-init.sh -y --default-toolchain stable --profile default --no-modify-path
 
 ENV PATH="/cargo/bin:${PATH}"
 WORKDIR /code

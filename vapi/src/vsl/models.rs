@@ -102,7 +102,7 @@ pub struct LogResponse {
 
 #[derive(Debug, Serialize)]
 pub struct LogRecord {
-    pub level: i32,
+    pub level: u32,
     pub vxid: u32,
     pub parent_vxid: u32,
     pub tx_type: TxType,
